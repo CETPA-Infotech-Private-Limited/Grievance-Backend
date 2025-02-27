@@ -1,0 +1,52 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35527.113 d17.12
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grievance_API", "Grievance_API\Grievance_API.csproj", "{5DA13407-E824-4ECE-AA43-AF832F5653BF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grievance_BAL", "Grievance_BAL\Grievance_BAL.csproj", "{47FA88CA-6B9A-4778-BC3F-A6752EBBC9E0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grievance_DAL", "Grievance_DAL\Grievance_DAL.csproj", "{49AD613C-CFC9-431E-973B-540811246A2F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grievance_Logger", "Grievance_Logger\Grievance_Logger.csproj", "{493BDD65-DED3-4EA5-AC79-71120B768D47}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grievance_Model", "Grievance_Model\Grievance_Model.csproj", "{C5B1BBE9-D7E2-40F2-A25F-3F5AC2CDB919}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grievance_Utility", "Grievance_Utility\Grievance_Utility.csproj", "{49BC584F-4FCF-4B3A-92D8-0D96673969E7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5DA13407-E824-4ECE-AA43-AF832F5653BF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5DA13407-E824-4ECE-AA43-AF832F5653BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5DA13407-E824-4ECE-AA43-AF832F5653BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5DA13407-E824-4ECE-AA43-AF832F5653BF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{47FA88CA-6B9A-4778-BC3F-A6752EBBC9E0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{47FA88CA-6B9A-4778-BC3F-A6752EBBC9E0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{47FA88CA-6B9A-4778-BC3F-A6752EBBC9E0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{47FA88CA-6B9A-4778-BC3F-A6752EBBC9E0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{49AD613C-CFC9-431E-973B-540811246A2F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{49AD613C-CFC9-431E-973B-540811246A2F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{49AD613C-CFC9-431E-973B-540811246A2F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{49AD613C-CFC9-431E-973B-540811246A2F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{493BDD65-DED3-4EA5-AC79-71120B768D47}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{493BDD65-DED3-4EA5-AC79-71120B768D47}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{493BDD65-DED3-4EA5-AC79-71120B768D47}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{493BDD65-DED3-4EA5-AC79-71120B768D47}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C5B1BBE9-D7E2-40F2-A25F-3F5AC2CDB919}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C5B1BBE9-D7E2-40F2-A25F-3F5AC2CDB919}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C5B1BBE9-D7E2-40F2-A25F-3F5AC2CDB919}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C5B1BBE9-D7E2-40F2-A25F-3F5AC2CDB919}.Release|Any CPU.Build.0 = Release|Any CPU
+		{49BC584F-4FCF-4B3A-92D8-0D96673969E7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{49BC584F-4FCF-4B3A-92D8-0D96673969E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{49BC584F-4FCF-4B3A-92D8-0D96673969E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{49BC584F-4FCF-4B3A-92D8-0D96673969E7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

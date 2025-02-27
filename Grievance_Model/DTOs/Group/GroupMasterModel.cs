@@ -1,0 +1,15 @@
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace Grievance_Model.DTOs.Group
+{
+    public class GroupMasterModel
+    {
+        [Required]
+        public int Id { get; set; }
+        [Required]
+        public string GroupName { get; set; }
+        public int ParentGroupId { get; set; }
+        public string? Description { get; set; }
+        public string? UserCode { get; set; }
+    }
+}
