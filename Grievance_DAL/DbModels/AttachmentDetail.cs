@@ -2,7 +2,7 @@
 
 namespace Grievance_DAL.DbModels
 {
-    public class Attachment : BaseEntity
+    public class AttachmentDetail : BaseEntity
     {
         [Key]
         public int Id { get; set; }

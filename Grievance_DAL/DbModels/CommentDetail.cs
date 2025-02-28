@@ -1,6 +1,6 @@
 ﻿namespace Grievance_DAL.DbModels
 {
-    public class Comment : BaseEntity
+    public class CommentDetail : BaseEntity
     {
         public int Id { get; set; }
         public string CommentText { get; set; }

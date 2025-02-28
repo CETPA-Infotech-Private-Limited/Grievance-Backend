@@ -24,7 +24,7 @@ namespace Grievance_BAL.Services
             this.userRepo = userRepo;
             this.employeeRepository = employeeRepository;
             this.grievanceDbContext = grievanceDbContext;
-        }                        
+        }
 
         public async Task<ResponseModel> IsValidProgress(string token, string empCode)
         {
@@ -65,15 +65,11 @@ namespace Grievance_BAL.Services
                                 var isSuperAdmin = configuration["SuperAdmin"]?.ToString() == employeeDetails.empCode;
                                 if (!isSuperAdmin)
                                 {
-                                    var query = (from ur in grievanceDbContext.UserRoleMappings
-                                                 join rm in grievanceDbContext.AppRoles on ur.RoleId equals rm.Id
-                                                 where ur.UserCode == empCode
-                                                 select rm.RoleName).ToList();
-
-                                    if (query.Count > 0)
+                                    var userRoles = (List<string>)(await userRepo.GetUserRolesAsync(empCode)).Data;
+                                    if (userRoles.Count > 0)
                                     {
 
-                                        string commaSeparatedRole = string.Join(", ", query);
+                                        string commaSeparatedRole = string.Join(", ", userRoles);
 
                                         var claims = new[]
                                                          {
@@ -107,17 +103,17 @@ namespace Grievance_BAL.Services
                                     }
                                     else
                                     {
-                                        var claims = new[]
-                                                         {
-                                  new Claim("Roles", "user"),
-                                  new Claim("unique_name",employeeDetails.empName),
-                                  new Claim("EmpCode", employeeDetails.empCode),
-                                  new Claim("Designation", employeeDetails.designation),
-                                  new Claim("Unit", employeeDetails.units),
-                                  new Claim("unitId", employeeDetails.unitId.ToString()),
-                                  new Claim("Lavel", employeeDetails.lavel),
-                                  new Claim("SSOToken", token),
-                                  new Claim("Department",  employeeDetails.department)};
+                                        var claims = new[]{
+                                          new Claim("Roles", "user"),
+                                          new Claim("unique_name",employeeDetails.empName),
+                                          new Claim("EmpCode", employeeDetails.empCode),
+                                          new Claim("Designation", employeeDetails.designation),
+                                          new Claim("Unit", employeeDetails.units),
+                                          new Claim("unitId", employeeDetails.unitId.ToString()),
+                                          new Claim("Lavel", employeeDetails.lavel),
+                                          new Claim("SSOToken", token),
+                                          new Claim("Department",  employeeDetails.department)
+                                        };
 
                                         var Tokens = GenerateJwtUsingCustomClaims(key, claims, 30);
 
@@ -139,17 +135,17 @@ namespace Grievance_BAL.Services
                                 }
                                 else
                                 {
-                                    var claims = new[]
-                                                         {
-                                              new Claim("Roles", "superAdmin"),
-                                              new Claim("unique_name",employeeDetails.empName),
-                                              new Claim("EmpCode", employeeDetails.empCode),
-                                              new Claim("Designation", employeeDetails.designation),
-                                              new Claim("Unit", employeeDetails.units),
-                                              new Claim("unitId", employeeDetails.unitId.ToString()),
-                                              new Claim("Lavel", employeeDetails.lavel),
-                                              new Claim("SSOToken", token),
-                                              new Claim("Department",  employeeDetails.department)};
+                                    var claims = new[]{
+                                        new Claim("Roles", "superAdmin"),
+                                        new Claim("unique_name",employeeDetails.empName),
+                                        new Claim("EmpCode", employeeDetails.empCode),
+                                        new Claim("Designation", employeeDetails.designation),
+                                        new Claim("Unit", employeeDetails.units),
+                                        new Claim("unitId", employeeDetails.unitId.ToString()),
+                                        new Claim("Lavel", employeeDetails.lavel),
+                                        new Claim("SSOToken", token),
+                                        new Claim("Department",  employeeDetails.department)
+                                    };
 
                                     var Tokens = GenerateJwtUsingCustomClaims(key, claims, 30);
 
@@ -200,8 +196,6 @@ namespace Grievance_BAL.Services
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-
             var token = new JwtSecurityToken(
 
                 claims: claims,

@@ -229,7 +229,7 @@ namespace Grievance_BAL.Services
             if (groupMaster != null)
             {
                 var hasParentGroup = _dbContext.Groups.Where(group => group.Id == groupMaster.ParentGroupId).Any();
-                if(groupMaster.ParentGroupId != 0 && !hasParentGroup)
+                if((groupMaster.ParentGroupId != 0 && !hasParentGroup) || (groupMaster.Id == groupMaster.ParentGroupId))
                 {
                     responseModel.StatusCode = HttpStatusCode.BadRequest;
                     responseModel.Message = "Parent Group Invalid.";
@@ -239,11 +239,11 @@ namespace Grievance_BAL.Services
                 var existingGroup = _dbContext.Groups.Where(group => group.Id == groupMaster.Id || group.GroupName.ToLower().Trim() == groupMaster.GroupName.ToLower().Trim()).FirstOrDefault();
                 if (existingGroup == null)
                 {
-                    var newGroup = new Group()
+                    var newGroup = new GroupMaster()
                     {
                         Id = groupMaster.Id,
                         GroupName = groupMaster.GroupName,
-                        ParentGroupId = groupMaster.ParentGroupId,
+                        ParentGroupId = groupMaster.ParentGroupId == 0 ? null : groupMaster.ParentGroupId,
                         Description = groupMaster.Description ?? string.Empty,
                         CreatedBy = Convert.ToInt32(groupMaster.UserCode),
                         CreatedDate = DateTime.Now,
@@ -259,8 +259,8 @@ namespace Grievance_BAL.Services
                 else
                 {
                     existingGroup.GroupName = groupMaster.GroupName;
-                    existingGroup.ParentGroupId = groupMaster.ParentGroupId;
-                    existingGroup.Description = groupMaster.Description;
+                    existingGroup.ParentGroupId = groupMaster.ParentGroupId == 0 ? null : groupMaster.ParentGroupId;
+                    existingGroup.Description = groupMaster.Description ?? string.Empty;
                     existingGroup.ModifyBy = Convert.ToInt32(groupMaster.UserCode);
                     existingGroup.ModifyDate = DateTime.Now;
                     existingGroup.IsActive = true;

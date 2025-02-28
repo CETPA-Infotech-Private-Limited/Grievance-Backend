@@ -10,4 +10,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Http.Features" Version="2.3.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Grievance_Utility\Grievance_Utility.csproj" />
+  </ItemGroup>
+
 </Project>

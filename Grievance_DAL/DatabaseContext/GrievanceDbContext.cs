@@ -31,7 +31,7 @@ namespace Grievance_DAL.DatabaseContext
 
         // Master Tables
         public DbSet<AppRole> AppRoles { get; set; }
-        public DbSet<Group> Groups { get; set; }
+        public DbSet<GroupMaster> Groups { get; set; }
         public DbSet<GrievanceStatus> GrievanceStatuses { get; set; }
 
         // Mapping Tables
@@ -44,8 +44,8 @@ namespace Grievance_DAL.DatabaseContext
         public DbSet<GrievanceProcess> GrievanceProcesses { get; set; }
 
         // Supporting Tables
-        public DbSet<Attachment> Attachments { get; set; }
-        public DbSet<Comment> Comments { get; set; }
+        public DbSet<AttachmentDetail> Attachments { get; set; }
+        public DbSet<CommentDetail> Comments { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

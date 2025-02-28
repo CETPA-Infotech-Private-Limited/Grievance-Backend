@@ -15,7 +15,7 @@ namespace Grievance_API.Controllers
         }
 
 
-        [HttpGet("IsValidProgress")]
+        [HttpPost("IsValidProgress")]
         public async Task<ResponseModel> IsValidProgress(string Token, string EmpCode)
         {
             var response = await _accountRepository.IsValidProgress(Token, EmpCode);

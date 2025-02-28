@@ -13,11 +13,11 @@ namespace Grievance_DAL.DbModels
 
         public int GroupId { get; set; }
         [ForeignKey(nameof(GroupId))]
-        public virtual Group Group { get; set; }
+        public virtual GroupMaster Group { get; set; }
 
         public int? GroupSubTypeId { get; set; }
         [ForeignKey(nameof(GroupSubTypeId))]
-        public virtual Group? GroupSubType { get; set; }
+        public virtual GroupMaster? GroupSubType { get; set; }
 
         public bool IsInternal { get; set; }
         public string UserEmail { get; set; }
@@ -28,7 +28,7 @@ namespace Grievance_DAL.DbModels
         public int UnitId { get; set; }
         public string UnitName { get; set; }
 
-        public GrievanceRound Round { get; set; } = GrievanceRound.First; 
+        public int Round { get; set; } = (int)GrievanceRound.First; 
 
         public int StatusId { get; set; }
         [ForeignKey(nameof(StatusId))]

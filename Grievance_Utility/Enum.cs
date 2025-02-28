@@ -11,4 +11,9 @@
         Deleted = 0,
         Active = 9
     }
+    public enum GrievanceStatus
+    {
+        Created = 1
+
+    }
 }
