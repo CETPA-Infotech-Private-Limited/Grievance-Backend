@@ -4,6 +4,7 @@ using Grievance_DAL.DatabaseContext;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Grievance_DAL.Migrations
 {
     [DbContext(typeof(GrievanceDbContext))]
-    partial class GrievanceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250301070957_ModifiedTbl1")]
+    partial class ModifiedTbl1
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -173,6 +175,12 @@ namespace Grievance_DAL.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("GroupId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("GroupSubTypeId")
+                        .HasColumnType("int");
+
                     b.Property<bool?>("IsActive")
                         .HasColumnType("bit");
 
@@ -192,9 +200,6 @@ namespace Grievance_DAL.Migrations
                         .HasColumnType("int");
 
                     b.Property<int>("RowStatus")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ServiceId")
                         .HasColumnType("int");
 
                     b.Property<int>("StatusId")
@@ -225,7 +230,9 @@ namespace Grievance_DAL.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ServiceId");
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("GroupSubTypeId");
 
                     b.HasIndex("StatusId");
 
@@ -261,6 +268,12 @@ namespace Grievance_DAL.Migrations
                     b.Property<int>("GrievanceMasterId")
                         .HasColumnType("int");
 
+                    b.Property<int>("GroupId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("GroupSubTypeId")
+                        .HasColumnType("int");
+
                     b.Property<bool?>("IsActive")
                         .HasColumnType("bit");
 
@@ -279,9 +292,6 @@ namespace Grievance_DAL.Migrations
                     b.Property<int>("RowStatus")
                         .HasColumnType("int");
 
-                    b.Property<int>("ServiceId")
-                        .HasColumnType("int");
-
                     b.Property<int>("StatusId")
                         .HasColumnType("int");
 
@@ -293,7 +303,9 @@ namespace Grievance_DAL.Migrations
 
                     b.HasIndex("GrievanceMasterId");
 
-                    b.HasIndex("ServiceId");
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("GroupSubTypeId");
 
                     b.HasIndex("StatusId");
 
@@ -372,61 +384,17 @@ namespace Grievance_DAL.Migrations
                     b.Property<DateTime?>("ModifyDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("ParentGroupId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Remark")
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ParentGroupId");
 
                     b.ToTable("Groups");
-                });
-
-            modelBuilder.Entity("Grievance_DAL.DbModels.ServiceMaster", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
-
-                    b.Property<int?>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("CreatedDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("GroupMasterId")
-                        .HasColumnType("int");
-
-                    b.Property<bool?>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<int?>("ModifyBy")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("ModifyDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("ParentServiceId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Remark")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ServiceDescription")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ServiceName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GroupMasterId");
-
-                    b.HasIndex("ParentServiceId");
-
-                    b.ToTable("Services");
                 });
 
             modelBuilder.Entity("Grievance_DAL.DbModels.UserDepartmentMapping", b =>
@@ -586,11 +554,16 @@ namespace Grievance_DAL.Migrations
 
             modelBuilder.Entity("Grievance_DAL.DbModels.GrievanceMaster", b =>
                 {
-                    b.HasOne("Grievance_DAL.DbModels.GroupMaster", "ServiceMaster")
+                    b.HasOne("Grievance_DAL.DbModels.GroupMaster", "Group")
                         .WithMany()
-                        .HasForeignKey("ServiceId")
+                        .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Grievance_DAL.DbModels.GroupMaster", "GroupSubType")
+                        .WithMany()
+                        .HasForeignKey("GroupSubTypeId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Grievance_DAL.DbModels.GrievanceStatus", "Status")
                         .WithMany()
@@ -598,7 +571,9 @@ namespace Grievance_DAL.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("ServiceMaster");
+                    b.Navigation("Group");
+
+                    b.Navigation("GroupSubType");
 
                     b.Navigation("Status");
                 });
@@ -611,9 +586,15 @@ namespace Grievance_DAL.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Grievance_DAL.DbModels.GroupMaster", "ServiceMaster")
+                    b.HasOne("Grievance_DAL.DbModels.GroupMaster", "Group")
                         .WithMany()
-                        .HasForeignKey("ServiceId")
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Grievance_DAL.DbModels.GroupMaster", "GroupSubType")
+                        .WithMany()
+                        .HasForeignKey("GroupSubTypeId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -625,24 +606,20 @@ namespace Grievance_DAL.Migrations
 
                     b.Navigation("GrievanceMaster");
 
-                    b.Navigation("ServiceMaster");
+                    b.Navigation("Group");
+
+                    b.Navigation("GroupSubType");
 
                     b.Navigation("Status");
                 });
 
-            modelBuilder.Entity("Grievance_DAL.DbModels.ServiceMaster", b =>
+            modelBuilder.Entity("Grievance_DAL.DbModels.GroupMaster", b =>
                 {
-                    b.HasOne("Grievance_DAL.DbModels.GroupMaster", "GroupMaster")
+                    b.HasOne("Grievance_DAL.DbModels.GroupMaster", "ParentGroup")
                         .WithMany()
-                        .HasForeignKey("GroupMasterId");
+                        .HasForeignKey("ParentGroupId");
 
-                    b.HasOne("Grievance_DAL.DbModels.ServiceMaster", "ParentService")
-                        .WithMany()
-                        .HasForeignKey("ParentServiceId");
-
-                    b.Navigation("GroupMaster");
-
-                    b.Navigation("ParentService");
+                    b.Navigation("ParentGroup");
                 });
 
             modelBuilder.Entity("Grievance_DAL.DbModels.UserGroupMapping", b =>

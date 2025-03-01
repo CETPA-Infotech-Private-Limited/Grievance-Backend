@@ -12,8 +12,7 @@ namespace Grievance_Model.DTOs.Grievance
         public string Title { get; set; }
         public string Description { get; set; }
 
-        public int GroupId { get; set; }
-        public int GroupSubTypeId { get; set; }
+        public int ServiceId { get; set; }
 
         public int Round { get; set; } = (int)GrievanceRound.First; 
 
@@ -28,6 +27,9 @@ namespace Grievance_Model.DTOs.Grievance
 
         public string? CommentText { get; set; }
         public List<IFormFile>? Attachments { get; set; }
+
+        // baseUrl for resolution link
+        public string? BaseUrl { get; set; }
     }
 
 }

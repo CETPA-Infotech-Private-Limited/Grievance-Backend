@@ -31,6 +31,7 @@ namespace Grievance_DAL.DatabaseContext
 
         // Master Tables
         public DbSet<AppRole> AppRoles { get; set; }
+        public DbSet<ServiceMaster> Services { get; set; }
         public DbSet<GroupMaster> Groups { get; set; }
         public DbSet<GrievanceStatus> GrievanceStatuses { get; set; }
 
@@ -51,15 +52,9 @@ namespace Grievance_DAL.DatabaseContext
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<GrievanceMaster>()
-                .HasOne(g => g.Group)
+                .HasOne(g => g.ServiceMaster)
                 .WithMany()
-                .HasForeignKey(g => g.GroupId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            modelBuilder.Entity<GrievanceMaster>()
-                .HasOne(g => g.GroupSubType)
-                .WithMany()
-                .HasForeignKey(g => g.GroupSubTypeId)
+                .HasForeignKey(g => g.ServiceId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GrievanceMaster>()
@@ -69,15 +64,9 @@ namespace Grievance_DAL.DatabaseContext
                 .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GrievanceProcess>()
-                .HasOne(g => g.Group)
+                .HasOne(g => g.ServiceMaster)
                 .WithMany()
-                .HasForeignKey(g => g.GroupId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            modelBuilder.Entity<GrievanceProcess>()
-                .HasOne(g => g.GroupSubType)
-                .WithMany()
-                .HasForeignKey(g => g.GroupSubTypeId)
+                .HasForeignKey(g => g.ServiceId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GrievanceProcess>()

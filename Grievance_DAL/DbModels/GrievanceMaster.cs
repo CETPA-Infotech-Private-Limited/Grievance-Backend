@@ -11,13 +11,9 @@ namespace Grievance_DAL.DbModels
         public string Title { get; set; }
         public string Description { get; set; }
 
-        public int GroupId { get; set; }
-        [ForeignKey(nameof(GroupId))]
-        public virtual GroupMaster Group { get; set; }
-
-        public int? GroupSubTypeId { get; set; }
-        [ForeignKey(nameof(GroupSubTypeId))]
-        public virtual GroupMaster? GroupSubType { get; set; }
+        public int ServiceId { get; set; }
+        [ForeignKey(nameof(ServiceId))]
+        public virtual GroupMaster ServiceMaster { get; set; }
 
         public bool IsInternal { get; set; }
         public string UserEmail { get; set; }

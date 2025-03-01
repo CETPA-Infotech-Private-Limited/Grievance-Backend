@@ -11,6 +11,8 @@ namespace Grievance_BAL.InjectionExtension
             services.AddScoped<IUserRepository, UserRepository>();
             services.AddScoped<IEmployeeRepository, EmployeeRepository>();
             services.AddScoped<IAccountRepository, AccountRepository>();
+            services.AddScoped<IGrievanceRepository, GrievanceRepository>();
+            services.AddScoped<ICommonRepository, CommonRepository>();
 
         }
     }

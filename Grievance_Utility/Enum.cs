@@ -13,7 +13,10 @@
     }
     public enum GrievanceStatus
     {
-        Created = 1
+        Created = 1,
+        InProgress = 2,
+        AwatingInfo = 3,
 
+        Resolved = 10
     }
 }

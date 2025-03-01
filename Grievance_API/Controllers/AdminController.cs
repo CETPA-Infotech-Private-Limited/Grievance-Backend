@@ -1,7 +1,10 @@
 ﻿using Grievance_BAL.IServices;
+using Grievance_DAL.DbModels;
 using Grievance_Model.DTOs.AppResponse;
+using Grievance_Model.DTOs.Department;
 using Grievance_Model.DTOs.Group;
 using Grievance_Model.DTOs.Roles;
+using Grievance_Model.DTOs.Service;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Grievance_API.Controllers
@@ -30,6 +33,11 @@ namespace Grievance_API.Controllers
         public async Task<ResponseModel> GetApplicationRole()
         {
             return await userRepository.GetApplicationRoleAsync();
+        }
+        [HttpGet("GetRoleDetail")]
+        public async Task<ResponseModel> GetRoleDetail(int roleId)
+        {
+            return await userRepository.GetRoleDetailAsync(roleId);
         }
         [HttpGet("GetUserRoles")]
         public async Task<ResponseModel> GetUserRoles(string empCode)
@@ -61,6 +69,35 @@ namespace Grievance_API.Controllers
         {
             return await userRepository.UpdateUserGroupMappingAsync(mappings);
         }
-
+        [HttpPost("UpdateUserDepartmentMapping")]
+        public async Task<ResponseModel> UpdateUserDepartmentMapping([FromBody] UserDeptMappingModel mappings)
+        {
+            return await userRepository.UpdateUserDepartmentMappingAsync(mappings);
+        }
+        [HttpGet("GetDepartmentMappingList")]
+        public async Task<ResponseModel> GetDepartmentMappingList()
+        {
+            return await userRepository.GetDepartmentMappingListAsync();
+        }
+        [HttpGet("GetServiceMasterList")]
+        public async Task<ResponseModel> GetServiceMasterList()
+        {
+            return await userRepository.GetServiceMasterListAsync();
+        }
+        [HttpPost("AddUpdateServiceMaster")]
+        public async Task<ResponseModel> AddUpdateServiceMaster([FromBody] ServiceMasterModel serviceMaster)
+        {
+            return await userRepository.AddUpdateServiceMasterAsync(serviceMaster);
+        }
+        [HttpGet("ActiveInactiveService")]
+        public async Task<ResponseModel> ActiveInactiveService(int serviceId, bool isActive)
+        {
+            return await userRepository.ActiveInactiveServiceAsync(serviceId, isActive);
+        }
+        [HttpGet("GetServiceDetail")]
+        public async Task<ResponseModel> GetServiceDetail(int serviceId)
+        {
+            return await userRepository.GetServiceDetailAsync(serviceId);
+        }
     }
 }

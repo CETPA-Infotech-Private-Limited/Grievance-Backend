@@ -14,6 +14,8 @@ using static Grievance_BAL.Services.AccountRepository;
 using System.Net.Mail;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
+using Grievance_Model.DTOs.Notification;
+using System.Globalization;
 
 namespace Grievance_BAL.Services
 {
@@ -62,17 +64,15 @@ namespace Grievance_BAL.Services
             };
 
             IDbContextTransaction transaction = _dbContext.Database.BeginTransaction();
-            int grievanceMasterId = 0;
             var grievanceMaster = _dbContext.GrievanceMasters.Where(x => x.Id == grievanceModel.GrievanceMasterId).FirstOrDefault();
             var userDetails = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(grievanceModel.UserCode));
             if (grievanceMaster == null)
             {
-                GrievanceMaster grievanceMasterobj = new GrievanceMaster()
+                grievanceMaster = new GrievanceMaster()
                 {
                     Title = grievanceModel.Title,
                     Description = grievanceModel.Description,
-                    GroupId = grievanceModel.GroupId,
-                    GroupSubTypeId = grievanceModel.GroupSubTypeId,
+                    ServiceId = grievanceModel.ServiceId,
                     IsInternal = grievanceModel.IsInternal,
                     UserEmail = grievanceModel.IsInternal ? userDetails.empEmail : grievanceModel.UserEmail,
                     UserCode = grievanceModel.IsInternal ? grievanceModel.UserCode : string.Empty,
@@ -84,16 +84,13 @@ namespace Grievance_BAL.Services
                     CreatedBy = Convert.ToInt32(userDetails?.empCode),
                     CreatedDate = DateTime.Now
                 };
-                _dbContext.GrievanceMasters.Add(grievanceMasterobj);
+                _dbContext.GrievanceMasters.Add(grievanceMaster);
                 _dbContext.SaveChanges();
-
-                grievanceMasterId = grievanceMasterobj.Id;
             }
             else
             {
 
-                grievanceMaster.GroupId = grievanceModel.GroupId;
-                grievanceMaster.GroupSubTypeId = grievanceModel.GroupSubTypeId;
+                grievanceMaster.ServiceId = grievanceModel.ServiceId;
 
                 grievanceMaster.StatusId = grievanceModel.StatusId;
 
@@ -102,22 +99,21 @@ namespace Grievance_BAL.Services
 
                 _dbContext.GrievanceMasters.Update(grievanceMaster);
                 _dbContext.SaveChanges();
-
-                grievanceMasterId = grievanceMaster.Id;
             }
 
-            if (grievanceMasterId != 0)
+            if (grievanceMaster.Id != 0)
             {
                 string addressalCode = string.Empty;
                 string addressalDetail = string.Empty;
 
                 if (string.IsNullOrEmpty(grievanceModel.AssignedUserCode))
                 {
-                    var finalGroupId = grievanceModel.GroupSubTypeId != 0 ? grievanceModel.GroupSubTypeId : grievanceModel.GroupId;
-                    var addressal = (from ug in _dbContext.UserGroupMappings
+                    var addressal = (from sm in _dbContext.Services
+                                     join ug in _dbContext.UserGroupMappings on sm.GroupMasterId equals ug.GroupId 
                                      join ud in _dbContext.UserDepartmentMappings on ug.UserCode equals ud.UserCode
                                      where ud.Department.Trim().ToLower() == userDetails.department.Trim().ToLower()
-                                     && ug.GroupId == finalGroupId
+                                     && ug.GroupId == sm.GroupMasterId && ug.UnitId == userDetails.unitId.ToString()
+                                     && sm.Id == grievanceMaster.ServiceId
                                      select new
                                      {
                                          UserCode = ug.UserCode,
@@ -146,12 +142,11 @@ namespace Grievance_BAL.Services
 
                 GrievanceProcess grievanceProcessObj = new GrievanceProcess()
                 {
-                    GrievanceMasterId = grievanceMasterId,
+                    GrievanceMasterId = grievanceMaster.Id,
 
                     Title = grievanceModel.Title,
                     Description = grievanceModel.Description,
-                    GroupId = grievanceModel.GroupId,
-                    GroupSubTypeId = grievanceModel.GroupSubTypeId,
+                    ServiceId = grievanceModel.ServiceId,
                     Round = grievanceModel.Round,
                     StatusId = grievanceMaster == null ? (int)Grievance_Utility.GrievanceStatus.Created : grievanceModel.StatusId,
                     RowStatus = Grievance_Utility.RowStatus.Active,
@@ -211,11 +206,34 @@ namespace Grievance_BAL.Services
                         }
                     }
                 }
+
+                // to send the resolution link to requestor
+                if (grievanceProcessObj.StatusId == (int)Grievance_Utility.GrievanceStatus.Resolved)
+                {
+                    ResolutionDetail resolutionDetail = new ResolutionDetail
+                    {
+                        UserCode = grievanceMaster?.UserCode ?? string.Empty,
+                        UserEmail = grievanceMaster?.UserEmail ?? string.Empty,
+
+                        GrievanceMasterId = grievanceMaster?.Id ?? 0,
+                        GrievanceProcessId = grievanceProcessObj.Id,
+                        Round = grievanceMaster?.Round ?? 1,
+
+                        ResolutionDT = DateTime.Now,
+                        ResolverCode = grievanceModel.AssignedUserCode,
+                        ResolverDetails = grievanceModel.AssignedUserDetails,
+                        AcceptLink = grievanceModel.BaseUrl + "/" + Guid.NewGuid().ToString() + "$",
+                        RejectLink = grievanceModel.BaseUrl + "/" + Guid.NewGuid().ToString(),
+                        ResolutionStatus = Constant.ResolutionStatus.Pending
+                    };
+                    //SendResolutionLink(resolutionDetail);
+                }
+
                 transaction.Commit();
 
                 responseModel.StatusCode = HttpStatusCode.OK;
                 responseModel.Message = "Grievance created successfully.";
-                responseModel.Data = grievanceMasterId;
+                responseModel.Data = grievanceMaster?.Id ?? 0;
             }
             else
             {
@@ -226,7 +244,321 @@ namespace Grievance_BAL.Services
         }
 
 
+        //private async Task<ResponseModel> SendResolutionLink(ResolutionDetail resolutionDetail)
+        //{
+        //    ResponseModel responseDetails = new ResponseModel()
+        //    {
+        //        StatusCode = System.Net.HttpStatusCode.NotFound,
+        //        Message = "Bad Request"
+        //    };
 
+        //    IDbContextTransaction transaction = _dbContext.Database.BeginTransaction();
+        //    if (!string.IsNullOrEmpty(resolutionDetail.UserEmail))
+        //    {
+        //        List<string> _emailToId = new List<string>()
+        //        {
+        //            resolutionDetail.UserEmail
+        //        };
+
+        //        StringBuilder getEmailTemplate = new StringBuilder();
+
+        //        string htmlFilePath = @"wwwroot\NotificationEmailTemplate\TemplateSendMemberInvitation.html";
+
+        //        StreamReader reader = File.OpenText(htmlFilePath);// Path to your 
+        //        getEmailTemplate.Append(reader.ReadToEnd());
+        //        reader.Close();
+        //        string acceptToken = Guid.NewGuid().ToString() + "$";
+        //        string rejectToken = Guid.NewGuid().ToString();
+        //        string acceptLink = baseUrl + "/" + acceptToken;
+        //        string rejectLink = baseUrl + "/" + rejectToken;
+        //        #region Replace HTML Template Value
+        //        getEmailTemplate.Replace("{empName}", emp.empName);
+        //        getEmailTemplate.Replace("{VisitorName}", visitor?.FirstName);
+        //        getEmailTemplate.Replace("{PrposedDate}", visitor?.MeetDate?.ToString("dd/MM/yyyy"));
+        //        getEmailTemplate.Replace("{duration}", visitor.InTime + " To " + visitor.OutTime);
+        //        getEmailTemplate.Replace("{Purpose}", visitor.PurposeOfVisit);
+        //        getEmailTemplate.Replace("{AcceptLink}", acceptLink);
+        //        getEmailTemplate.Replace("{RejectLink}", rejectLink);
+        //        #endregion
+        //        transaction = context.Database.BeginTransaction();
+        //        sendMemberInvitation = new VisitorApproval()
+        //        {
+        //            VisitorId = visitor.Id,
+        //            IsLinkActive = true,
+        //            RequestedDate = DateTime.Now,
+        //            WhomeToMeet = visitor.WhomeToMeet,
+        //            AcceptLink = acceptToken,
+        //            RejectLink = rejectToken,
+        //            GettingConfirmationStatus = "pending",
+        //        };
+        //        context.VisitorApproval.Add(sendMemberInvitation);
+        //        context.SaveChanges();
+
+        //        var date = visitor?.MeetDate ?? DateTime.MinValue;
+        //        var time = visitor?.InTime ?? TimeSpan.Zero;
+        //        var combinedDateTime = date.Date + time;
+
+        //        string formattedDateTime = combinedDateTime != DateTime.MinValue
+        //             ? combinedDateTime.ToString("dd/MM/yyyy HH:mm")
+        //                    : "N/A";
+
+
+
+        //        string subjectTemplate = "Subject: Meeting Request | {ApplicantName} from {OrganizationName} | Date: {DateAndTime}";
+
+
+        //        string emailSubject = subjectTemplate
+        //                .Replace("{ApplicantName}", visitor?.FirstName ?? "Unknown")
+        //                .Replace("{OrganizationName}", visitor?.OrgName ?? "Unknown")
+        //                .Replace("{DateAndTime}", formattedDateTime);
+
+        //        MailRequestModel mailRequest = new MailRequestModel()
+        //        {
+        //            EmailSubject = emailSubject,
+        //            EmailBody = getEmailTemplate,
+        //            EmailToName = emp.empName,
+        //            EmailToId = _emailToId,
+        //            EmailCCId = null,
+        //        };
+
+        //        var sendMailDetails = await _notificationRepository.SendNotification(mailRequest);
+
+        //        var empMobile = emp.empMobileNo;
+        //        var visitorMobile = visitor.MobileNo;
+        //        var developmentMode = configuration["DeploymentModes"]?.ToString()?.ToLower();
+        //        if (developmentMode == "cetpa")
+        //            empMobile = configuration["WhatsappTestNumber"]?.ToString();
+
+        //        CultureInfo cultureInfo = Thread.CurrentThread.CurrentCulture;
+        //        TextInfo textInfo = cultureInfo.TextInfo;
+        //        var visitorName = textInfo.ToTitleCase(visitor.FirstName + " " + visitor.MiddleName + " " + visitor.LastName);
+        //        visitorName = Regex.Replace(visitorName, @"\s+", " ");
+        //        var requestWhatsapp = new SendWhatsApppMessageRequest()
+        //        {
+        //            MobileNo = empMobile,
+        //            Name = visitorName,
+        //            OrgName = visitor.OrgName,
+        //            WhometoMeet = emp.empName,
+        //            MeetDate = visitor.MeetDate.Value.ToString("dd/MM/yyyy"),
+        //            StartTime = visitor.InTime.ToString().Substring(0, 5),
+        //            EndTime = visitor.OutTime.ToString().Substring(0, 5),
+        //            Remarks = visitor.PurposeOfVisit,
+        //            AcceptToken = acceptToken,
+        //            RejectToken = rejectToken
+        //        };
+        //        if (developmentMode != "cetpa")
+        //        {
+        //            await sendWhatsApp.SendWhatsApppMessage(requestWhatsapp);
+        //        }
+
+
+        //        if (!string.IsNullOrEmpty(visitorMobile))
+        //        {
+        //            var requestWhatsappVisitor = new SendWhatsApppMessageRequest()
+        //            {
+        //                MobileNo = visitorMobile,
+        //                Name = visitorName,
+        //                OrgName = visitor.OrgName,
+        //                WhometoMeet = emp.empName,
+        //                MeetDate = visitor.MeetDate.Value.ToString("dd/MM/yyyy"),
+        //                StartTime = visitor.InTime.ToString().Substring(0, 5),
+        //                EndTime = visitor.OutTime.ToString().Substring(0, 5),
+        //                Remarks = visitor.PurposeOfVisit,
+        //                AcceptToken = acceptToken,
+        //                RejectToken = rejectToken
+        //            };
+        //            if (developmentMode != "cetpa")
+        //            {
+        //                await sendWhatsApp.SendWhatsAPPRequestConfirmation(requestWhatsappVisitor);
+        //            }
+        //        }
+
+        //        ///
+        //        if (sendMailDetails != null && sendMailDetails.StatusCode == HttpStatusCode.OK)
+        //        {
+
+        //            transaction.Commit();
+
+        //            responseDetails.StatusCode = HttpStatusCode.OK;
+        //            responseDetails.Message = "The invitation has been sent successfully.";
+        //        }
+        //        else
+        //        {
+        //            responseDetails.StatusCode = HttpStatusCode.BadRequest;
+        //            responseDetails.Message = "Invitation not sent due to issue in SMTP. Contact to Admin IT Team. " + sendMailDetails.Message + "";
+        //        }
+
+        //    }
+        //    else
+        //    {
+        //        responseDetails.StatusCode = HttpStatusCode.BadRequest;
+        //        responseDetails.Message = "Employee details are not getting from DFCClL API. Contact to Admin IT Team.";
+        //    }
+        //    return responseDetails;
+        //}
+
+        //public async Task<ResponseModel> VerifyInvitationLink(string InvitationLink)
+        //{
+        //    ResponseModel responseDetails = new ResponseModel()
+        //    {
+        //        StatusCode = System.Net.HttpStatusCode.NotFound,
+        //        Message = "Invalid Invitation Link."
+        //    };
+        //    if (!string.IsNullOrEmpty(InvitationLink))
+        //    {
+        //        var getInvitationLink = context.VisitorApproval.Where(opt => opt.AcceptLink == InvitationLink && opt.IsLinkActive == true).FirstOrDefault();
+        //        if (getInvitationLink != null)
+        //        {
+
+        //            var vister = await context.VisitorMaster.FirstOrDefaultAsync(x => x.Id == getInvitationLink.VisitorId);
+
+        //            DateTime meetDate = Convert.ToDateTime(vister?.MeetDate?.Date);
+        //            TimeSpan meetTime = (TimeSpan)(vister?.InTime);
+
+        //            DateTime meetingDateTime = meetDate.Add(meetTime);
+        //            DateTime currentDateTime = DateTime.Now;
+
+        //            if (currentDateTime > meetingDateTime)
+        //            {
+        //                getInvitationLink.UpdatedDate = DateTime.Now;
+        //                getInvitationLink.UpdatedBy = getInvitationLink.WhomeToMeet;
+        //                getInvitationLink.IsLinkActive = false;
+        //                getInvitationLink.IsActive = false;
+        //                context.VisitorApproval.Update(getInvitationLink);
+        //                context.SaveChanges();
+
+        //                responseDetails.StatusCode = HttpStatusCode.BadRequest;
+        //                responseDetails.Message = "The scheduled date and time for the meeting have already passed.";
+        //                return responseDetails;
+
+        //            }
+
+        //            getInvitationLink.GettingConfirmationStatus = "accepted";
+        //            getInvitationLink.ConfirmationDate = DateTime.Now;
+        //            getInvitationLink.UpdatedDate = DateTime.Now;
+        //            getInvitationLink.UpdatedBy = getInvitationLink.WhomeToMeet;
+        //            getInvitationLink.IsLinkActive = false;
+        //            context.VisitorApproval.Update(getInvitationLink);
+        //            context.SaveChanges();
+        //            var emp = await _empRepository.GetEmployeeDetailsWithEmpCode(vister.WhomeToMeet);
+
+        //            var empMobile = vister.MobileNo;
+        //            var developmentMode = configuration["DeploymentModes"]?.ToString()?.ToLower();
+        //            if (developmentMode == "cetpa")
+        //                empMobile = configuration["WhatsappTestNumber"]?.ToString();
+
+        //            CultureInfo cultureInfo = Thread.CurrentThread.CurrentCulture;
+        //            TextInfo textInfo = cultureInfo.TextInfo;
+        //            var visitorName = textInfo.ToTitleCase(vister.FirstName + " " + vister.MiddleName + " " + vister.LastName);
+        //            visitorName = Regex.Replace(visitorName, @"\s+", " ");
+        //            var requestWhatsapp = new SendWhatsApppMessageRequest()
+        //            {
+        //                MobileNo = empMobile,
+        //                Name = visitorName,
+        //                OrgName = vister.OrgName,
+        //                WhometoMeet = emp.empName,
+        //                MeetDate = vister.MeetDate.Value.ToString("dd/MM/yyyy"),
+        //                StartTime = vister.InTime.ToString().Substring(0, 5),
+        //                EndTime = vister.OutTime.ToString().Substring(0, 5),
+        //                Remarks = vister.PurposeOfVisit,
+        //                AcceptToken = getInvitationLink.AcceptLink,
+        //                RejectToken = getInvitationLink.RejectLink,
+        //            };
+        //            if (developmentMode != "cetpa")
+        //                await sendWhatsApp.SendWhatsAPPAcceptConfirmation(requestWhatsapp);
+
+        //            ///
+        //            if (vister != null)
+        //            {
+        //                var slots = new UserCalenderBooking()
+        //                {
+        //                    EmployeeId = Convert.ToInt32(getInvitationLink.WhomeToMeet),
+        //                    Date = vister.MeetDate,
+        //                    InTime = vister.InTime,
+        //                    OutTime = vister.OutTime,
+        //                    VisitorId = vister.Id,
+        //                    CreatedDate = DateTime.Now
+        //                };
+        //                await context.UserCalenderBooking.AddAsync(slots);
+        //                await context.SaveChangesAsync();
+        //            }
+
+        //            responseDetails.StatusCode = HttpStatusCode.OK;
+        //            responseDetails.Message = "Your request has been accepted successfully.";
+        //            return responseDetails;
+        //        }
+        //        var getRejectLink = context.VisitorApproval.Where(opt => opt.RejectLink == InvitationLink && opt.IsLinkActive == true).FirstOrDefault();
+        //        if (getRejectLink != null)
+        //        {
+        //            var vister = await context.VisitorMaster.FirstOrDefaultAsync(x => x.Id == getRejectLink.VisitorId);
+
+        //            DateTime meetDate = Convert.ToDateTime(vister?.MeetDate?.Date);
+        //            TimeSpan meetTime = (TimeSpan)(vister?.InTime);
+
+        //            DateTime meetingDateTime = meetDate.Add(meetTime);
+        //            DateTime currentDateTime = DateTime.Now;
+
+        //            if (currentDateTime > meetingDateTime)
+        //            {
+        //                getRejectLink.UpdatedDate = DateTime.Now;
+        //                getRejectLink.UpdatedBy = getRejectLink.WhomeToMeet;
+        //                getRejectLink.IsLinkActive = false;
+        //                getRejectLink.IsActive = false;
+        //                context.VisitorApproval.Update(getRejectLink);
+        //                context.SaveChanges();
+
+        //                responseDetails.StatusCode = HttpStatusCode.BadRequest;
+        //                responseDetails.Message = "The scheduled date and time for the meeting have already passed.";
+        //                return responseDetails;
+
+        //            }
+
+
+        //            getRejectLink.GettingConfirmationStatus = "rejected";
+        //            getRejectLink.ConfirmationDate = DateTime.Now;
+        //            getRejectLink.UpdatedDate = DateTime.Now;
+        //            getRejectLink.UpdatedBy = getRejectLink.WhomeToMeet;
+        //            getRejectLink.IsLinkActive = false;
+        //            getRejectLink.UpdatedDate = DateTime.Now;
+        //            context.Update(getRejectLink);
+        //            context.SaveChanges();
+
+
+        //            var emp = await _empRepository.GetEmployeeDetailsWithEmpCode(vister.WhomeToMeet);
+
+        //            var empMobile = vister.MobileNo;
+        //            var developmentMode = configuration["DeploymentModes"]?.ToString()?.ToLower();
+        //            if (developmentMode == "cetpa")
+        //                empMobile = configuration["WhatsappTestNumber"]?.ToString();
+
+        //            CultureInfo cultureInfo = Thread.CurrentThread.CurrentCulture;
+        //            TextInfo textInfo = cultureInfo.TextInfo;
+        //            var visitorName = textInfo.ToTitleCase(vister.FirstName + " " + vister.MiddleName + " " + vister.LastName);
+        //            visitorName = Regex.Replace(visitorName, @"\s+", " ");
+        //            var requestWhatsapp = new SendWhatsApppMessageRequest()
+        //            {
+        //                MobileNo = empMobile,
+        //                Name = visitorName,
+        //                OrgName = vister.OrgName,
+        //                WhometoMeet = emp.empName,
+        //                MeetDate = vister.MeetDate.Value.ToString("dd/MM/yyyy"),
+        //                StartTime = vister.InTime.ToString().Substring(0, 5),
+        //                EndTime = vister.OutTime.ToString().Substring(0, 5),
+        //                Remarks = vister.PurposeOfVisit,
+        //                AcceptToken = getRejectLink.AcceptLink,
+        //                RejectToken = getRejectLink.RejectLink,
+        //            };
+        //            if (developmentMode != "cetpa")
+        //                await sendWhatsApp.SendWhatsAPPRejectConfirmation(requestWhatsapp);
+
+        //            responseDetails.StatusCode = HttpStatusCode.OK;
+        //            responseDetails.Message = "Your request has been rejected successfully.";
+        //            return responseDetails;
+        //        }
+
+        //    }
+        //    return responseDetails;
+        //}
 
         public async Task<ResponseModel> GrievanceDetailsAsync(int grievanceId, string baseUrl)
         {
@@ -255,8 +587,7 @@ namespace Grievance_BAL.Services
                             Attachments = grievanceAttachments,
                             UserCode = grievanceDetail.UserCode,
                             UserDetails = grievanceDetail.UserDetails,
-                            Group = gp.GroupId,
-                            SubGroup = gp.GroupSubTypeId,
+                            ServiceId = gp.ServiceId,
                             Round = gp.Round,
                             AssignedUserCode = gp.AssignedUserCode,
                             AssignedUserDetails = gp.AssignedUserDetails,

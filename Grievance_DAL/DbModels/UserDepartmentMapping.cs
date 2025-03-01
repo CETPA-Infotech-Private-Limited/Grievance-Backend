@@ -7,6 +7,9 @@ namespace Grievance_DAL.DbModels
         [Key]
         public int Id { get; set; }
 
+        public string UnitId { get; set; }
+        public string UnitName { get; set; }
+
         public string UserCode { get; set; }
         public string UserDetails { get; set; }
 
