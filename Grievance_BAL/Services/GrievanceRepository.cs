@@ -38,7 +38,7 @@ namespace Grievance_BAL.Services
             _configuration = configuration;
         }
 
-        public async Task<ResponseModel> GetGrievanceListAsync(string userCode, int pageNumber = 1, int pageSize = 10, string sortBy = "CreatedDate", string sortOrder = "desc", int? statusId = null)
+        public async Task<ResponseModel> GetGrievanceListAsync(string userCode, int pageNumber = 1, int pageSize = 10)
         {
             ResponseModel responseModel = new ResponseModel
             {
@@ -82,9 +82,9 @@ namespace Grievance_BAL.Services
                     .Select(gp => gp.GrievanceMasterId);
 
                 var masterGrievance = await (from gm in _dbContext.GrievanceMasters
-                                       join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
-                                       where (groupUserCodes.Contains(gp.AssignedUserCode) && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved) || resolvedGrievanceIds.Contains(gm.Id)
-                                       select gm.Id).ToListAsync();
+                                             join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
+                                             where (groupUserCodes.Contains(gp.AssignedUserCode) && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved) || resolvedGrievanceIds.Contains(gm.Id)
+                                             select gm.Id).ToListAsync();
                 query = query.Where(g => masterGrievance.Contains(g.Id));
             }
 
@@ -95,23 +95,7 @@ namespace Grievance_BAL.Services
                 query = query.Where(g => unitIds.Contains(g.UnitId));
             }
 
-            if (statusId.HasValue)
-            {
-                query = query.Where(g => g.StatusId == statusId.Value);
-            }
-
-            switch (sortBy.ToLower())
-            {
-                case "title":
-                    query = sortOrder.ToLower() == "asc" ? query.OrderBy(g => g.Title) : query.OrderByDescending(g => g.Title);
-                    break;
-                case "status":
-                    query = sortOrder.ToLower() == "asc" ? query.OrderBy(g => g.StatusId) : query.OrderByDescending(g => g.StatusId);
-                    break;
-                default:
-                    query = sortOrder.ToLower() == "asc" ? query.OrderBy(g => g.CreatedDate) : query.OrderByDescending(g => g.CreatedDate);
-                    break;
-            }
+            query = query.OrderByDescending(g => g.CreatedDate);
 
             int totalRecords = await query.CountAsync();
             var grievances = await query
@@ -133,7 +117,7 @@ namespace Grievance_BAL.Services
             return responseModel;
         }
 
-        public async Task<ResponseModel> MyGrievanceListAsync(string userCode, int pageNumber = 1, int pageSize = 10, string sortBy = "CreatedDate", string sortOrder = "desc", int? statusId = null)
+        public async Task<ResponseModel> MyGrievanceListAsync(string userCode, int pageNumber = 1, int pageSize = 10)
         {
             ResponseModel responseModel = new ResponseModel
             {
@@ -144,23 +128,7 @@ namespace Grievance_BAL.Services
             IQueryable<GrievanceMaster> query = _dbContext.GrievanceMasters
                 .Where(g => g.UserCode == userCode);
 
-            if (statusId.HasValue)
-            {
-                query = query.Where(g => g.StatusId == statusId.Value);
-            }
-
-            switch (sortBy.ToLower())
-            {
-                case "title":
-                    query = sortOrder.ToLower() == "asc" ? query.OrderBy(g => g.Title) : query.OrderByDescending(g => g.Title);
-                    break;
-                case "status":
-                    query = sortOrder.ToLower() == "asc" ? query.OrderBy(g => g.StatusId) : query.OrderByDescending(g => g.StatusId);
-                    break;
-                default:
-                    query = sortOrder.ToLower() == "asc" ? query.OrderBy(g => g.CreatedDate) : query.OrderByDescending(g => g.CreatedDate);
-                    break;
-            }
+            query = query.OrderByDescending(g => g.CreatedDate);
 
             int totalRecords = await query.CountAsync();
             var grievances = await query

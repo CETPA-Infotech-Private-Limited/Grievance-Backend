@@ -5,8 +5,8 @@ namespace Grievance_BAL.IServices
 {
     public interface IGrievanceRepository
     {
-        Task<ResponseModel> GetGrievanceListAsync(string userCode, int pageNumber = 1, int pageSize = 10, string sortBy = "CreatedDate", string sortOrder = "desc", int? statusId = null);
-        Task<ResponseModel> MyGrievanceListAsync(string userCode, int pageNumber = 1, int pageSize = 10, string sortBy = "CreatedDate", string sortOrder = "desc", int? statusId = null);
+        Task<ResponseModel> GetGrievanceListAsync(string userCode, int pageNumber = 1, int pageSize = 10);
+        Task<ResponseModel> MyGrievanceListAsync(string userCode, int pageNumber = 1, int pageSize = 10);
         Task<ResponseModel> AddUpdateGrievanceAsync(GrievanceProcessDTO grievanceModel);
         Task<ResponseModel> VerifyResolutionLink(string resolutionLink);
         Task<ResponseModel> GrievanceDetailsAsync(int grievanceId, string baseUrl);

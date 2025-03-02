@@ -16,14 +16,14 @@ namespace Grievance_API.Controllers
         }
 
         [HttpGet("GetGrievanceList")]
-        public async Task<ResponseModel> GetGrievanceList(string userCode, int pageNumber = 1, int pageSize = 10, string sortBy = "CreatedDate", string sortOrder = "desc", int? statusId = null)
+        public async Task<ResponseModel> GetGrievanceList(string userCode, int pageNumber = 1, int pageSize = 10)
         {
-            return await _grievanceRepository.GetGrievanceListAsync(userCode, pageNumber, pageSize, sortBy, sortOrder, statusId);
+            return await _grievanceRepository.GetGrievanceListAsync(userCode, pageNumber, pageSize);
         }
         [HttpGet("MyGrievanceList")]
-        public async Task<ResponseModel> MyGrievanceList(string userCode, int pageNumber = 1, int pageSize = 10, string sortBy = "CreatedDate", string sortOrder = "desc", int? statusId = null)
+        public async Task<ResponseModel> MyGrievanceList(string userCode, int pageNumber = 1, int pageSize = 10)
         {
-            return await _grievanceRepository.MyGrievanceListAsync(userCode, pageNumber, pageSize, sortBy, sortOrder, statusId);
+            return await _grievanceRepository.MyGrievanceListAsync(userCode, pageNumber, pageSize);
         }
         [HttpPost("AddUpdateGrievance")]
         public async Task<ResponseModel> AddUpdateGrievance([FromBody] GrievanceProcessDTO grievanceModel)
