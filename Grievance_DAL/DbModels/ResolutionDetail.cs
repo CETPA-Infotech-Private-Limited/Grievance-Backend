@@ -2,7 +2,7 @@
 
 namespace Grievance_DAL.DbModels
 {
-    public class ResolutionDetail
+    public class ResolutionDetail: BaseEntity
     {
         [Key]
         public int Id { get; set; }

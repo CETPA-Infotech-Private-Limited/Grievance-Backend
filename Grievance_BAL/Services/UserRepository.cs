@@ -6,6 +6,7 @@ using Grievance_DAL.DatabaseContext;
 using Grievance_DAL.DbModels;
 using Grievance_Model.DTOs.AppResponse;
 using Grievance_Model.DTOs.Department;
+using Grievance_Model.DTOs.Employee;
 using Grievance_Model.DTOs.Group;
 using Grievance_Model.DTOs.Roles;
 using Grievance_Model.DTOs.Service;
@@ -82,53 +83,102 @@ namespace Grievance_BAL.Services
 
         public async Task<ResponseModel> UpdateUserRoleMappingAsync(UserRoleMappingModel mappings)
         {
-            ResponseModel responseModel = new ResponseModel()
+            ResponseModel responseModel = new()
             {
-                StatusCode = System.Net.HttpStatusCode.BadRequest,
+                StatusCode = HttpStatusCode.BadRequest,
                 Message = "Bad Request"
             };
-            var transaction = _dbContext.Database.BeginTransaction();
-            var removeMapping = _dbContext.UserRoleMappings.Where(a => a.UserCode == mappings.UserCode && (mappings.RoleId == null || !mappings.RoleId.Contains(a.RoleId))).ToList();
 
-            List<UserRoleMapping> newMapping = new();
-            if (mappings.RoleId != null && mappings.RoleId.Count > 0)
+            if (mappings.RoleId == null || mappings.RoleId.Count == 0 || string.IsNullOrEmpty(mappings.UnitId))
             {
-                var excludeMapping = _dbContext.UserRoleMappings.Where(a => a.UserCode == mappings.UserCode && mappings.RoleId.Contains(a.RoleId)).Select(a => a.RoleId);
+                responseModel.Message = "RoleId and UnitId are required";
+                return responseModel;
+            }
 
-                newMapping = mappings.RoleId.Where(a => !excludeMapping.Contains(a)).Select(newMap => new UserRoleMapping()
+            var userCodes = string.IsNullOrWhiteSpace(mappings.UserCode)
+                ? new List<string>()
+                : mappings.UserCode.Split(',').Select(x => x.Trim()).ToList();
+
+            var userDetails = string.IsNullOrWhiteSpace(mappings.UserDetails)
+                ? new List<string>()
+                : mappings.UserDetails.Split(',').Select(x => x.Trim()).ToList();
+
+            if (userCodes.Count != userDetails.Count)
+            {
+                responseModel.Message = "UserCode and UserDetails count mismatch";
+                return responseModel;
+            }
+
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
+            {
+                List<UserRoleMapping> newMappings = new();
+
+                foreach (var roleId in mappings.RoleId)
                 {
-                    UserCode = mappings.UserCode,
-                    UserDetails = mappings.UserDetails,
-                    UnitId = mappings.UnitId,
-                    UnitName = mappings.UnitName,
-                    RoleId = newMap
-                }).ToList();
+                    var existingMappings = _dbContext.UserRoleMappings
+                        .Where(a => a.RoleId == roleId && a.UnitId == mappings.UnitId)
+                        .ToList();
+
+                    if (userCodes.Count == 0)
+                    {
+                        if (existingMappings.Any())
+                        {
+                            _dbContext.UserRoleMappings.RemoveRange(existingMappings);
+                        }
+                        continue;
+                    }
+
+                    var usersToRemove = existingMappings.Where(a => !userCodes.Contains(a.UserCode)).ToList();
+                    if (usersToRemove.Any())
+                    {
+                        _dbContext.UserRoleMappings.RemoveRange(usersToRemove);
+                    }
+
+                    var existingUserCodes = existingMappings.Select(a => a.UserCode).ToHashSet();
+                    for (int i = 0; i < userCodes.Count; i++)
+                    {
+                        if (!existingUserCodes.Contains(userCodes[i]))
+                        {
+                            newMappings.Add(new UserRoleMapping
+                            {
+                                UserCode = userCodes[i],
+                                UserDetails = userDetails[i],
+                                UnitId = mappings.UnitId,
+                                UnitName = mappings.UnitName,
+                                RoleId = roleId
+                            });
+                        }
+                    }
+                }
+
+                if (newMappings.Any())
+                {
+                    await _dbContext.UserRoleMappings.AddRangeAsync(newMappings);
+                }
+
+                var resultCount = await _dbContext.SaveChangesAsync();
+                if (resultCount > 0)
+                {
+                    await transaction.CommitAsync();
+                    responseModel.StatusCode = HttpStatusCode.OK;
+                    responseModel.Message = "User Role Mapping Updated Successfully";
+                    responseModel.Data = mappings;
+                    responseModel.DataLength = newMappings.Count;
+                }
+                else
+                {
+                    responseModel.StatusCode = HttpStatusCode.NotModified;
+                    responseModel.Message = "No changes made to User Role Mapping";
+                }
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                responseModel.StatusCode = HttpStatusCode.InternalServerError;
+                responseModel.Message = $"Error: {ex.Message}";
             }
 
-            if (removeMapping != null && removeMapping.Count() > 0)
-            {
-                _dbContext.UserRoleMappings.RemoveRange(removeMapping);
-            }
-            if (newMapping != null && newMapping.Count() > 0)
-            {
-                await _dbContext.UserRoleMappings.AddRangeAsync(newMapping);
-            }
-
-            var resultCount = await _dbContext.SaveChangesAsync();
-            if (resultCount > 0)
-            {
-                await _dbContext.SaveChangesAsync();
-                transaction.Commit();
-                responseModel.StatusCode = HttpStatusCode.OK;
-                responseModel.Message = "User Role Mapping Updated";
-                responseModel.Data = mappings;
-                responseModel.DataLength = mappings.RoleId.Count();
-            }
-            else
-            {
-                responseModel.StatusCode = System.Net.HttpStatusCode.NotModified;
-                responseModel.Message = "User Role Mapping Not Updated";
-            }
             return responseModel;
         }
 
@@ -140,7 +190,7 @@ namespace Grievance_BAL.Services
                 Message = "Bad Request"
             };
 
-            var appRoles = _dbContext.AppRoles.ToList();
+            var appRoles = await _dbContext.AppRoles.ToListAsync();
             if (appRoles != null && appRoles.Count() > 0)
             {
                 responseModel.StatusCode = HttpStatusCode.OK;
@@ -206,16 +256,16 @@ namespace Grievance_BAL.Services
                 {
                     "User"
                 };
+                var isAgent = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode).Any();
+                if (isAgent)
+                    empRoles.Add(Constant.AppRoles.Addressal);
 
-                empRoles.AddRange(_dbContext.UserRoleMappings.Include(a => a.Role).Where(a => a.UserCode == empCode).Select(a => a.Role.RoleName).ToList());
+                empRoles.AddRange((await _dbContext.UserRoleMappings.Include(a => a.Role).Where(a => a.UserCode == empCode).Select(a => a.Role.RoleName).ToListAsync()).Distinct());
 
-                var employeeDetails = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(empCode));
-                if (employeeDetails != null)
-                {
-                    var isSuperAdmin = _configuration.GetSection("SuperAdmin")?.Value?.ToString() == employeeDetails.empCode;
-                    if (isSuperAdmin)
-                        empRoles.Add(Constant.AppRoles.SuperAdmin);
-                }
+                var isSuperAdmin = _configuration.GetSection("SuperAdmin")?.Value?.ToString() == empCode;
+                if (isSuperAdmin)
+                    empRoles.Add(Constant.AppRoles.SuperAdmin);
+
                 if (empRoles != null)
                 {
                     responseModel.StatusCode = HttpStatusCode.OK;
@@ -533,14 +583,14 @@ namespace Grievance_BAL.Services
             var mappedUser = (await _dbContext.UserDepartmentMappings.Select(depart => new
             {
                 Department = depart.Department,
-                MappedUser = _dbContext.UserDepartmentMappings.Where(a=>a.Department == depart.Department).Select(a=> new
+                MappedUser = _dbContext.UserDepartmentMappings.Where(a => a.Department == depart.Department).Select(a => new
                 {
                     UserCode = a.UserCode,
                     UserDetail = a.UserDetails,
                     UnitId = a.UnitId,
                     UnitName = a.UnitName
                 }).ToList()
-            }).ToListAsync()).DistinctBy(a=>a.Department);
+            }).ToListAsync()).DistinctBy(a => a.Department);
             if (mappedUser != null)
             {
                 responseModel.StatusCode = HttpStatusCode.OK;
@@ -563,7 +613,7 @@ namespace Grievance_BAL.Services
                 Message = "Bad Request"
             };
 
-            var serviceMasters = await _dbContext.Services.Include(a=>a.GroupMaster).ToListAsync();
+            var serviceMasters = await _dbContext.Services.Include(a => a.GroupMaster).ToListAsync();
             if (serviceMasters != null && serviceMasters.Count > 0)
             {
                 responseModel.StatusCode = HttpStatusCode.OK;
@@ -589,7 +639,7 @@ namespace Grievance_BAL.Services
             if (serviceMaster != null)
             {
                 var hasParentGroup = _dbContext.Services.Where(service => service.Id == serviceMaster.ParentServiceId).Any();
-                if ((serviceMaster.ParentServiceId != 0 && !hasParentGroup) || (serviceMaster.Id == serviceMaster.ParentServiceId))
+                if ((serviceMaster.ParentServiceId != 0 && !hasParentGroup) || (serviceMaster.Id != 0 && serviceMaster.Id == serviceMaster.ParentServiceId))
                 {
                     responseModel.StatusCode = HttpStatusCode.BadRequest;
                     responseModel.Message = "Parent Service Invalid.";

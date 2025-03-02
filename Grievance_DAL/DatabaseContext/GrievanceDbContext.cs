@@ -43,6 +43,7 @@ namespace Grievance_DAL.DatabaseContext
         // Grievance Related Tables
         public DbSet<GrievanceMaster> GrievanceMasters { get; set; }
         public DbSet<GrievanceProcess> GrievanceProcesses { get; set; }
+        public DbSet<ResolutionDetail> ResolutionDetails { get; set; }
 
         // Supporting Tables
         public DbSet<AttachmentDetail> Attachments { get; set; }

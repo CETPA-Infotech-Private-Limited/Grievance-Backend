@@ -21,7 +21,7 @@ namespace Grievance_DAL.DbModels
         public string UserCode { get; set; }  
         public string UserDetails { get; set; }
 
-        public int UnitId { get; set; }
+        public string UnitId { get; set; }
         public string UnitName { get; set; }
 
         public int Round { get; set; } = (int)GrievanceRound.First; 

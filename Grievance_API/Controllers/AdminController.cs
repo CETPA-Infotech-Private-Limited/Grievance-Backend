@@ -1,5 +1,4 @@
 ﻿using Grievance_BAL.IServices;
-using Grievance_DAL.DbModels;
 using Grievance_Model.DTOs.AppResponse;
 using Grievance_Model.DTOs.Department;
 using Grievance_Model.DTOs.Group;

@@ -16,6 +16,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using Grievance_Model.DTOs.Notification;
 using System.Globalization;
+using Microsoft.VisualBasic;
+using Microsoft.Extensions.Configuration;
+using System.Linq;
 
 namespace Grievance_BAL.Services
 {
@@ -24,38 +27,156 @@ namespace Grievance_BAL.Services
         private readonly GrievanceDbContext _dbContext;
         private readonly IEmployeeRepository _employeeRepository;
         private readonly ICommonRepository _common;
-        public GrievanceRepository(GrievanceDbContext dbContext, IEmployeeRepository employeeRepository, ICommonRepository common)
+        private readonly INotificationRepository _notificationRepository;
+        private readonly IConfiguration _configuration;
+        public GrievanceRepository(GrievanceDbContext dbContext, IEmployeeRepository employeeRepository, ICommonRepository common, INotificationRepository notificationRepository, IConfiguration configuration)
         {
             _dbContext = dbContext;
             _employeeRepository = employeeRepository;
             _common = common;
+            _notificationRepository = notificationRepository;
+            _configuration = configuration;
         }
 
-        public async Task<ResponseModel> AddGrievance(GrievanceProcessDTO grievanceModel)
+        public async Task<ResponseModel> GetGrievanceListAsync(string userCode, int pageNumber = 1, int pageSize = 10, string sortBy = "CreatedDate", string sortOrder = "desc", int? statusId = null)
         {
             ResponseModel responseModel = new ResponseModel
             {
                 StatusCode = HttpStatusCode.BadRequest,
-                Message = "Bad Request",
+                Message = "Bad Request"
             };
 
-            if (grievanceModel != null)
-            {
-                var grievanceMaster = _dbContext.GrievanceMasters.Where(x => x.Id == grievanceModel.GrievanceMasterId).FirstOrDefault();
-                if (grievanceMaster == null || grievanceMaster.Round == (int)Grievance_Utility.GrievanceRound.First)
-                {
-                    responseModel = await UpdateGrievanceRoundFirst(grievanceModel);
-                }
-                else
-                {
-                    int grievanceMasterId = grievanceMaster.Id;
-                }
+            var user = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(userCode));
 
+            if (user == null)
+            {
+                return new ResponseModel
+                {
+                    StatusCode = HttpStatusCode.NotFound,
+                    Message = "User not found."
+                };
             }
+
+            var userRoles = await _dbContext.UserRoleMappings
+                .Where(x => x.UserCode == userCode)
+                .Select(x => new { x.Role.RoleName, x.UnitId })
+                .ToListAsync();
+
+            bool isAddressal = userRoles.Any(r => r.RoleName == Constant.AppRoles.Addressal);
+            bool isNodalOrCGM = userRoles.Any(r => r.RoleName == Constant.AppRoles.NodalOfficer || r.RoleName == Constant.AppRoles.UnitCGM);
+
+            IQueryable<GrievanceMaster> query = _dbContext.GrievanceMasters.AsQueryable();
+
+            if (isAddressal)
+            {
+                var userGroups = await _dbContext.UserGroupMappings
+                    .Where(x => x.UserCode == userCode)
+                    .Select(x => x.GroupId)
+                    .ToListAsync();
+
+                var groupUserCodes = await _dbContext.UserGroupMappings
+                    .Where(x => userGroups.Contains(x.GroupId))
+                    .Select(x => x.UserCode)
+                    .ToListAsync();
+
+                query = query.Where(g => groupUserCodes.Contains(g.UserCode));
+            }
+
+            if (isNodalOrCGM)
+            {
+                var unitIds = userRoles.Select(r => r.UnitId).Distinct().ToList();
+
+                query = query.Where(g => unitIds.Contains(g.UnitId));
+            }
+
+            if (statusId.HasValue)
+            {
+                query = query.Where(g => g.StatusId == statusId.Value);
+            }
+
+            switch (sortBy.ToLower())
+            {
+                case "title":
+                    query = sortOrder.ToLower() == "asc" ? query.OrderBy(g => g.Title) : query.OrderByDescending(g => g.Title);
+                    break;
+                case "status":
+                    query = sortOrder.ToLower() == "asc" ? query.OrderBy(g => g.StatusId) : query.OrderByDescending(g => g.StatusId);
+                    break;
+                default:
+                    query = sortOrder.ToLower() == "asc" ? query.OrderBy(g => g.CreatedDate) : query.OrderByDescending(g => g.CreatedDate);
+                    break;
+            }
+
+            int totalRecords = await query.CountAsync();
+            var grievances = await query
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            responseModel.StatusCode = HttpStatusCode.OK;
+            responseModel.Message = "Grievance list retrieved successfully.";
+            responseModel.Data = new
+            {
+                TotalRecords = totalRecords,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                TotalPages = (int)Math.Ceiling((double)totalRecords / pageSize),
+                Data = grievances
+            };
+
             return responseModel;
         }
 
-        private async Task<ResponseModel> UpdateGrievanceRoundFirst(GrievanceProcessDTO grievanceModel)
+        public async Task<ResponseModel> MyGrievanceListAsync(string userCode, int pageNumber = 1, int pageSize = 10, string sortBy = "CreatedDate", string sortOrder = "desc", int? statusId = null)
+        {
+            ResponseModel responseModel = new ResponseModel
+            {
+                StatusCode = HttpStatusCode.BadRequest,
+                Message = "Bad Request"
+            };
+
+            IQueryable<GrievanceMaster> query = _dbContext.GrievanceMasters
+                .Where(g => g.UserCode == userCode);
+
+            if (statusId.HasValue)
+            {
+                query = query.Where(g => g.StatusId == statusId.Value);
+            }
+
+            switch (sortBy.ToLower())
+            {
+                case "title":
+                    query = sortOrder.ToLower() == "asc" ? query.OrderBy(g => g.Title) : query.OrderByDescending(g => g.Title);
+                    break;
+                case "status":
+                    query = sortOrder.ToLower() == "asc" ? query.OrderBy(g => g.StatusId) : query.OrderByDescending(g => g.StatusId);
+                    break;
+                default:
+                    query = sortOrder.ToLower() == "asc" ? query.OrderBy(g => g.CreatedDate) : query.OrderByDescending(g => g.CreatedDate);
+                    break;
+            }
+
+            int totalRecords = await query.CountAsync();
+            var grievances = await query
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            responseModel.StatusCode = HttpStatusCode.OK;
+            responseModel.Message = "My grievances retrieved successfully.";
+            responseModel.Data = new
+            {
+                TotalRecords = totalRecords,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                TotalPages = (int)Math.Ceiling((double)totalRecords / pageSize),
+                Data = grievances
+            };
+
+            return responseModel;
+        }
+
+        public async Task<ResponseModel> AddUpdateGrievanceAsync(GrievanceProcessDTO grievanceModel)
         {
             ResponseModel responseModel = new ResponseModel
             {
@@ -89,9 +210,7 @@ namespace Grievance_BAL.Services
             }
             else
             {
-
                 grievanceMaster.ServiceId = grievanceModel.ServiceId;
-
                 grievanceMaster.StatusId = grievanceModel.StatusId;
 
                 grievanceMaster.ModifyBy = Convert.ToInt32(userDetails?.empCode);
@@ -109,7 +228,7 @@ namespace Grievance_BAL.Services
                 if (string.IsNullOrEmpty(grievanceModel.AssignedUserCode))
                 {
                     var addressal = (from sm in _dbContext.Services
-                                     join ug in _dbContext.UserGroupMappings on sm.GroupMasterId equals ug.GroupId 
+                                     join ug in _dbContext.UserGroupMappings on sm.GroupMasterId equals ug.GroupId
                                      join ud in _dbContext.UserDepartmentMappings on ug.UserCode equals ud.UserCode
                                      where ud.Department.Trim().ToLower() == userDetails.department.Trim().ToLower()
                                      && ug.GroupId == sm.GroupMasterId && ug.UnitId == userDetails.unitId.ToString()
@@ -224,9 +343,12 @@ namespace Grievance_BAL.Services
                         ResolverDetails = grievanceModel.AssignedUserDetails,
                         AcceptLink = grievanceModel.BaseUrl + "/" + Guid.NewGuid().ToString() + "$",
                         RejectLink = grievanceModel.BaseUrl + "/" + Guid.NewGuid().ToString(),
-                        ResolutionStatus = Constant.ResolutionStatus.Pending
+                        ResolutionStatus = Constant.ResolutionStatus.Pending,
+
+                        CreatedDate = DateTime.Now,
+                        CreatedBy = Convert.ToInt32(grievanceModel.AssignedUserCode)
                     };
-                    //SendResolutionLink(resolutionDetail);
+                    await SendResolutionLink(resolutionDetail);
                 }
 
                 transaction.Commit();
@@ -243,322 +365,315 @@ namespace Grievance_BAL.Services
             return responseModel;
         }
 
+        private async Task<ResponseModel> StartSecondRound(int grievanceMasterId, string lastResolverCode)
+        {
+            ResponseModel responseModel = new ResponseModel
+            {
+                StatusCode = HttpStatusCode.BadRequest,
+                Message = "Bad Request",
+            };
 
-        //private async Task<ResponseModel> SendResolutionLink(ResolutionDetail resolutionDetail)
-        //{
-        //    ResponseModel responseDetails = new ResponseModel()
-        //    {
-        //        StatusCode = System.Net.HttpStatusCode.NotFound,
-        //        Message = "Bad Request"
-        //    };
+            using (var transaction = await _dbContext.Database.BeginTransactionAsync())
+            {
+                try
+                {
+                    var grievanceMaster = await _dbContext.GrievanceMasters
+                        .FirstOrDefaultAsync(x => x.Id == grievanceMasterId);
 
-        //    IDbContextTransaction transaction = _dbContext.Database.BeginTransaction();
-        //    if (!string.IsNullOrEmpty(resolutionDetail.UserEmail))
-        //    {
-        //        List<string> _emailToId = new List<string>()
-        //        {
-        //            resolutionDetail.UserEmail
-        //        };
+                    if (grievanceMaster == null)
+                    {
+                        return new ResponseModel
+                        {
+                            StatusCode = HttpStatusCode.NotFound,
+                            Message = "Grievance record not found."
+                        };
+                    }
+                    grievanceMaster.Round = (int)Grievance_Utility.GrievanceRound.Second;
+                    grievanceMaster.StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress;
 
-        //        StringBuilder getEmailTemplate = new StringBuilder();
+                    _dbContext.Update(grievanceMaster);
+                    _dbContext.SaveChanges();
 
-        //        string htmlFilePath = @"wwwroot\NotificationEmailTemplate\TemplateSendMemberInvitation.html";
+                    var lastResolverDetails = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(lastResolverCode));
+                    if (lastResolverDetails == null || lastResolverDetails.unitId != 0)
+                    {
+                        return new ResponseModel
+                        {
+                            StatusCode = HttpStatusCode.NotFound,
+                            Message = "Last resolver's unit not found."
+                        };
+                    }
 
-        //        StreamReader reader = File.OpenText(htmlFilePath);// Path to your 
-        //        getEmailTemplate.Append(reader.ReadToEnd());
-        //        reader.Close();
-        //        string acceptToken = Guid.NewGuid().ToString() + "$";
-        //        string rejectToken = Guid.NewGuid().ToString();
-        //        string acceptLink = baseUrl + "/" + acceptToken;
-        //        string rejectLink = baseUrl + "/" + rejectToken;
-        //        #region Replace HTML Template Value
-        //        getEmailTemplate.Replace("{empName}", emp.empName);
-        //        getEmailTemplate.Replace("{VisitorName}", visitor?.FirstName);
-        //        getEmailTemplate.Replace("{PrposedDate}", visitor?.MeetDate?.ToString("dd/MM/yyyy"));
-        //        getEmailTemplate.Replace("{duration}", visitor.InTime + " To " + visitor.OutTime);
-        //        getEmailTemplate.Replace("{Purpose}", visitor.PurposeOfVisit);
-        //        getEmailTemplate.Replace("{AcceptLink}", acceptLink);
-        //        getEmailTemplate.Replace("{RejectLink}", rejectLink);
-        //        #endregion
-        //        transaction = context.Database.BeginTransaction();
-        //        sendMemberInvitation = new VisitorApproval()
-        //        {
-        //            VisitorId = visitor.Id,
-        //            IsLinkActive = true,
-        //            RequestedDate = DateTime.Now,
-        //            WhomeToMeet = visitor.WhomeToMeet,
-        //            AcceptLink = acceptToken,
-        //            RejectLink = rejectToken,
-        //            GettingConfirmationStatus = "pending",
-        //        };
-        //        context.VisitorApproval.Add(sendMemberInvitation);
-        //        context.SaveChanges();
+                    var nodalOfficer = await _dbContext.UserRoleMappings
+                        .Where(x => x.UnitId == lastResolverDetails.unitId.ToString() && x.Role.RoleName == Constant.AppRoles.NodalOfficer)
+                        .Select(x => new { x.UserCode, x.UserDetails })
+                        .FirstOrDefaultAsync();
 
-        //        var date = visitor?.MeetDate ?? DateTime.MinValue;
-        //        var time = visitor?.InTime ?? TimeSpan.Zero;
-        //        var combinedDateTime = date.Date + time;
+                    if (nodalOfficer == null)
+                    {
+                        return new ResponseModel
+                        {
+                            StatusCode = HttpStatusCode.NotFound,
+                            Message = "No Nodal Officer found for this unit."
+                        };
+                    }
 
-        //        string formattedDateTime = combinedDateTime != DateTime.MinValue
-        //             ? combinedDateTime.ToString("dd/MM/yyyy HH:mm")
-        //                    : "N/A";
+                    GrievanceProcess grievanceProcessObj = new GrievanceProcess()
+                    {
+                        GrievanceMasterId = grievanceMasterId,
+                        Title = grievanceMaster.Title,
+                        Description = grievanceMaster.Description,
+                        ServiceId = grievanceMaster.ServiceId,
+                        Round = (int)Grievance_Utility.GrievanceRound.Second,
+                        StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress,
+                        RowStatus = Grievance_Utility.RowStatus.Active,
+                        AssignedUserCode = nodalOfficer.UserCode,
+                        AssignedUserDetails = nodalOfficer.UserDetails,
+                        CreatedBy = 0,
+                        CreatedDate = DateTime.Now
+                    };
 
+                    _dbContext.GrievanceProcesses.Add(grievanceProcessObj);
+                    await _dbContext.SaveChangesAsync();
 
+                    await transaction.CommitAsync();
 
-        //        string subjectTemplate = "Subject: Meeting Request | {ApplicantName} from {OrganizationName} | Date: {DateAndTime}";
+                    responseModel.StatusCode = HttpStatusCode.OK;
+                    responseModel.Message = "Second round of grievance initiated successfully.";
+                    responseModel.Data = grievanceProcessObj.Id;
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    responseModel.StatusCode = HttpStatusCode.InternalServerError;
+                    responseModel.Message = "An error occurred: " + ex.Message;
+                }
+            }
 
+            return responseModel;
+        }
 
-        //        string emailSubject = subjectTemplate
-        //                .Replace("{ApplicantName}", visitor?.FirstName ?? "Unknown")
-        //                .Replace("{OrganizationName}", visitor?.OrgName ?? "Unknown")
-        //                .Replace("{DateAndTime}", formattedDateTime);
+        private async Task<ResponseModel> StartThirdRound(int grievanceMasterId)
+        {
+            ResponseModel responseModel = new ResponseModel
+            {
+                StatusCode = HttpStatusCode.BadRequest,
+                Message = "Bad Request",
+            };
 
-        //        MailRequestModel mailRequest = new MailRequestModel()
-        //        {
-        //            EmailSubject = emailSubject,
-        //            EmailBody = getEmailTemplate,
-        //            EmailToName = emp.empName,
-        //            EmailToId = _emailToId,
-        //            EmailCCId = null,
-        //        };
+            using (var transaction = await _dbContext.Database.BeginTransactionAsync())
+            {
+                try
+                {
+                    var grievanceMaster = await _dbContext.GrievanceMasters
+                        .FirstOrDefaultAsync(x => x.Id == grievanceMasterId);
 
-        //        var sendMailDetails = await _notificationRepository.SendNotification(mailRequest);
+                    if (grievanceMaster == null)
+                    {
+                        return new ResponseModel
+                        {
+                            StatusCode = HttpStatusCode.NotFound,
+                            Message = "Grievance record not found."
+                        };
+                    }
 
-        //        var empMobile = emp.empMobileNo;
-        //        var visitorMobile = visitor.MobileNo;
-        //        var developmentMode = configuration["DeploymentModes"]?.ToString()?.ToLower();
-        //        if (developmentMode == "cetpa")
-        //            empMobile = configuration["WhatsappTestNumber"]?.ToString();
+                    grievanceMaster.Round = (int)Grievance_Utility.GrievanceRound.Third;
+                    grievanceMaster.StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress;
 
-        //        CultureInfo cultureInfo = Thread.CurrentThread.CurrentCulture;
-        //        TextInfo textInfo = cultureInfo.TextInfo;
-        //        var visitorName = textInfo.ToTitleCase(visitor.FirstName + " " + visitor.MiddleName + " " + visitor.LastName);
-        //        visitorName = Regex.Replace(visitorName, @"\s+", " ");
-        //        var requestWhatsapp = new SendWhatsApppMessageRequest()
-        //        {
-        //            MobileNo = empMobile,
-        //            Name = visitorName,
-        //            OrgName = visitor.OrgName,
-        //            WhometoMeet = emp.empName,
-        //            MeetDate = visitor.MeetDate.Value.ToString("dd/MM/yyyy"),
-        //            StartTime = visitor.InTime.ToString().Substring(0, 5),
-        //            EndTime = visitor.OutTime.ToString().Substring(0, 5),
-        //            Remarks = visitor.PurposeOfVisit,
-        //            AcceptToken = acceptToken,
-        //            RejectToken = rejectToken
-        //        };
-        //        if (developmentMode != "cetpa")
-        //        {
-        //            await sendWhatsApp.SendWhatsApppMessage(requestWhatsapp);
-        //        }
+                    _dbContext.Update(grievanceMaster);
+                    await _dbContext.SaveChangesAsync();
 
+                    var requestorDetails = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(grievanceMaster.CreatedBy));
 
-        //        if (!string.IsNullOrEmpty(visitorMobile))
-        //        {
-        //            var requestWhatsappVisitor = new SendWhatsApppMessageRequest()
-        //            {
-        //                MobileNo = visitorMobile,
-        //                Name = visitorName,
-        //                OrgName = visitor.OrgName,
-        //                WhometoMeet = emp.empName,
-        //                MeetDate = visitor.MeetDate.Value.ToString("dd/MM/yyyy"),
-        //                StartTime = visitor.InTime.ToString().Substring(0, 5),
-        //                EndTime = visitor.OutTime.ToString().Substring(0, 5),
-        //                Remarks = visitor.PurposeOfVisit,
-        //                AcceptToken = acceptToken,
-        //                RejectToken = rejectToken
-        //            };
-        //            if (developmentMode != "cetpa")
-        //            {
-        //                await sendWhatsApp.SendWhatsAPPRequestConfirmation(requestWhatsappVisitor);
-        //            }
-        //        }
+                    var committeeMember = await _dbContext.UserGroupMappings
+                        .Where(x => x.UnitId == requestorDetails.unitId.ToString() && x.Group.GroupName == "Committee")
+                        .Select(x => new { x.UserCode, x.UserDetails })
+                        .FirstOrDefaultAsync();
 
-        //        ///
-        //        if (sendMailDetails != null && sendMailDetails.StatusCode == HttpStatusCode.OK)
-        //        {
+                    var finalCommiteeUnit = _configuration["FinalCommiteeUnit"].ToString();
+                    if (committeeMember == null)
+                    {
+                        committeeMember = await _dbContext.UserGroupMappings
+                            .Where(x => x.UnitId == finalCommiteeUnit && x.Group.GroupName == "Committee")
+                            .Select(x => new { x.UserCode, x.UserDetails })
+                            .FirstOrDefaultAsync();
+                    }
 
-        //            transaction.Commit();
+                    if (committeeMember == null)
+                    {
+                        return new ResponseModel
+                        {
+                            StatusCode = HttpStatusCode.NotFound,
+                            Message = "No committee member found for this grievance."
+                        };
+                    }
 
-        //            responseDetails.StatusCode = HttpStatusCode.OK;
-        //            responseDetails.Message = "The invitation has been sent successfully.";
-        //        }
-        //        else
-        //        {
-        //            responseDetails.StatusCode = HttpStatusCode.BadRequest;
-        //            responseDetails.Message = "Invitation not sent due to issue in SMTP. Contact to Admin IT Team. " + sendMailDetails.Message + "";
-        //        }
+                    GrievanceProcess grievanceProcessObj = new GrievanceProcess()
+                    {
+                        GrievanceMasterId = grievanceMasterId,
+                        Title = grievanceMaster.Title,
+                        Description = grievanceMaster.Description,
+                        ServiceId = grievanceMaster.ServiceId,
+                        Round = (int)Grievance_Utility.GrievanceRound.Third,
+                        StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress,
+                        RowStatus = Grievance_Utility.RowStatus.Active,
+                        AssignedUserCode = committeeMember.UserCode,
+                        AssignedUserDetails = committeeMember.UserDetails,
+                        CreatedBy = 0,
+                        CreatedDate = DateTime.Now
+                    };
 
-        //    }
-        //    else
-        //    {
-        //        responseDetails.StatusCode = HttpStatusCode.BadRequest;
-        //        responseDetails.Message = "Employee details are not getting from DFCClL API. Contact to Admin IT Team.";
-        //    }
-        //    return responseDetails;
-        //}
+                    _dbContext.GrievanceProcesses.Add(grievanceProcessObj);
+                    await _dbContext.SaveChangesAsync();
 
-        //public async Task<ResponseModel> VerifyInvitationLink(string InvitationLink)
-        //{
-        //    ResponseModel responseDetails = new ResponseModel()
-        //    {
-        //        StatusCode = System.Net.HttpStatusCode.NotFound,
-        //        Message = "Invalid Invitation Link."
-        //    };
-        //    if (!string.IsNullOrEmpty(InvitationLink))
-        //    {
-        //        var getInvitationLink = context.VisitorApproval.Where(opt => opt.AcceptLink == InvitationLink && opt.IsLinkActive == true).FirstOrDefault();
-        //        if (getInvitationLink != null)
-        //        {
+                    await transaction.CommitAsync();
 
-        //            var vister = await context.VisitorMaster.FirstOrDefaultAsync(x => x.Id == getInvitationLink.VisitorId);
+                    responseModel.StatusCode = HttpStatusCode.OK;
+                    responseModel.Message = "Third round of grievance initiated successfully.";
+                    responseModel.Data = grievanceProcessObj.Id;
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    responseModel.StatusCode = HttpStatusCode.InternalServerError;
+                    responseModel.Message = "An error occurred: " + ex.Message;
+                }
+            }
 
-        //            DateTime meetDate = Convert.ToDateTime(vister?.MeetDate?.Date);
-        //            TimeSpan meetTime = (TimeSpan)(vister?.InTime);
+            return responseModel;
+        }
 
-        //            DateTime meetingDateTime = meetDate.Add(meetTime);
-        //            DateTime currentDateTime = DateTime.Now;
+        private async Task<ResponseModel> SendResolutionLink(ResolutionDetail resolutionDetail)
+        {
+            ResponseModel responseDetails = new ResponseModel()
+            {
+                StatusCode = System.Net.HttpStatusCode.NotFound,
+                Message = "Bad Request"
+            };
 
-        //            if (currentDateTime > meetingDateTime)
-        //            {
-        //                getInvitationLink.UpdatedDate = DateTime.Now;
-        //                getInvitationLink.UpdatedBy = getInvitationLink.WhomeToMeet;
-        //                getInvitationLink.IsLinkActive = false;
-        //                getInvitationLink.IsActive = false;
-        //                context.VisitorApproval.Update(getInvitationLink);
-        //                context.SaveChanges();
+            using (IDbContextTransaction transaction = _dbContext.Database.BeginTransaction())
+            {
+                if (!string.IsNullOrEmpty(resolutionDetail.UserEmail))
+                {
+                    List<string> _emailToId = new List<string>()
+            {
+                resolutionDetail.UserEmail
+            };
 
-        //                responseDetails.StatusCode = HttpStatusCode.BadRequest;
-        //                responseDetails.Message = "The scheduled date and time for the meeting have already passed.";
-        //                return responseDetails;
+                    StringBuilder getEmailTemplate = new StringBuilder();
+                    string htmlFilePath = @"wwwroot\NotificationEmailTemplate\TemplateResolutionNotification.html";
 
-        //            }
+                    using (StreamReader reader = File.OpenText(htmlFilePath))
+                    {
+                        getEmailTemplate.Append(reader.ReadToEnd());
+                    }
 
-        //            getInvitationLink.GettingConfirmationStatus = "accepted";
-        //            getInvitationLink.ConfirmationDate = DateTime.Now;
-        //            getInvitationLink.UpdatedDate = DateTime.Now;
-        //            getInvitationLink.UpdatedBy = getInvitationLink.WhomeToMeet;
-        //            getInvitationLink.IsLinkActive = false;
-        //            context.VisitorApproval.Update(getInvitationLink);
-        //            context.SaveChanges();
-        //            var emp = await _empRepository.GetEmployeeDetailsWithEmpCode(vister.WhomeToMeet);
+                    getEmailTemplate.Replace("{UserName}", resolutionDetail.UserCode);
+                    getEmailTemplate.Replace("{GrievanceId}", resolutionDetail.GrievanceMasterId.ToString());
+                    getEmailTemplate.Replace("{Round}", resolutionDetail.Round.ToString());
+                    getEmailTemplate.Replace("{AcceptLink}", resolutionDetail.AcceptLink);
+                    getEmailTemplate.Replace("{RejectLink}", resolutionDetail.RejectLink);
 
-        //            var empMobile = vister.MobileNo;
-        //            var developmentMode = configuration["DeploymentModes"]?.ToString()?.ToLower();
-        //            if (developmentMode == "cetpa")
-        //                empMobile = configuration["WhatsappTestNumber"]?.ToString();
+                    _dbContext.ResolutionDetails.Add(resolutionDetail);
+                    _dbContext.SaveChanges();
 
-        //            CultureInfo cultureInfo = Thread.CurrentThread.CurrentCulture;
-        //            TextInfo textInfo = cultureInfo.TextInfo;
-        //            var visitorName = textInfo.ToTitleCase(vister.FirstName + " " + vister.MiddleName + " " + vister.LastName);
-        //            visitorName = Regex.Replace(visitorName, @"\s+", " ");
-        //            var requestWhatsapp = new SendWhatsApppMessageRequest()
-        //            {
-        //                MobileNo = empMobile,
-        //                Name = visitorName,
-        //                OrgName = vister.OrgName,
-        //                WhometoMeet = emp.empName,
-        //                MeetDate = vister.MeetDate.Value.ToString("dd/MM/yyyy"),
-        //                StartTime = vister.InTime.ToString().Substring(0, 5),
-        //                EndTime = vister.OutTime.ToString().Substring(0, 5),
-        //                Remarks = vister.PurposeOfVisit,
-        //                AcceptToken = getInvitationLink.AcceptLink,
-        //                RejectToken = getInvitationLink.RejectLink,
-        //            };
-        //            if (developmentMode != "cetpa")
-        //                await sendWhatsApp.SendWhatsAPPAcceptConfirmation(requestWhatsapp);
+                    string emailSubject = $"Resolution Update: Grievance ID {resolutionDetail.GrievanceMasterId} - Awaiting Your Response";
 
-        //            ///
-        //            if (vister != null)
-        //            {
-        //                var slots = new UserCalenderBooking()
-        //                {
-        //                    EmployeeId = Convert.ToInt32(getInvitationLink.WhomeToMeet),
-        //                    Date = vister.MeetDate,
-        //                    InTime = vister.InTime,
-        //                    OutTime = vister.OutTime,
-        //                    VisitorId = vister.Id,
-        //                    CreatedDate = DateTime.Now
-        //                };
-        //                await context.UserCalenderBooking.AddAsync(slots);
-        //                await context.SaveChangesAsync();
-        //            }
+                    MailRequestModel mailRequest = new MailRequestModel()
+                    {
+                        EmailSubject = emailSubject,
+                        EmailBody = getEmailTemplate,
+                        EmailToId = _emailToId,
+                    };
 
-        //            responseDetails.StatusCode = HttpStatusCode.OK;
-        //            responseDetails.Message = "Your request has been accepted successfully.";
-        //            return responseDetails;
-        //        }
-        //        var getRejectLink = context.VisitorApproval.Where(opt => opt.RejectLink == InvitationLink && opt.IsLinkActive == true).FirstOrDefault();
-        //        if (getRejectLink != null)
-        //        {
-        //            var vister = await context.VisitorMaster.FirstOrDefaultAsync(x => x.Id == getRejectLink.VisitorId);
+                    var sendMailDetails = await _notificationRepository.SendNotification(mailRequest);
 
-        //            DateTime meetDate = Convert.ToDateTime(vister?.MeetDate?.Date);
-        //            TimeSpan meetTime = (TimeSpan)(vister?.InTime);
+                    if (sendMailDetails != null && sendMailDetails.StatusCode == HttpStatusCode.OK)
+                    {
+                        transaction.Commit();
+                        responseDetails.StatusCode = HttpStatusCode.OK;
+                        responseDetails.Message = "Resolution notification has been sent successfully.";
+                    }
+                    else
+                    {
+                        responseDetails.StatusCode = HttpStatusCode.BadRequest;
+                        responseDetails.Message = "Notification not sent due to an issue in SMTP. Contact the IT Team.";
+                    }
+                }
+                else
+                {
+                    responseDetails.StatusCode = HttpStatusCode.BadRequest;
+                    responseDetails.Message = "User details are missing.";
+                }
+            }
 
-        //            DateTime meetingDateTime = meetDate.Add(meetTime);
-        //            DateTime currentDateTime = DateTime.Now;
+            return responseDetails;
+        }
 
-        //            if (currentDateTime > meetingDateTime)
-        //            {
-        //                getRejectLink.UpdatedDate = DateTime.Now;
-        //                getRejectLink.UpdatedBy = getRejectLink.WhomeToMeet;
-        //                getRejectLink.IsLinkActive = false;
-        //                getRejectLink.IsActive = false;
-        //                context.VisitorApproval.Update(getRejectLink);
-        //                context.SaveChanges();
+        public async Task<ResponseModel> VerifyResolutionLink(string resolutionLink)
+        {
+            ResponseModel responseDetails = new ResponseModel()
+            {
+                StatusCode = System.Net.HttpStatusCode.NotFound,
+                Message = "Invalid Resolution Link."
+            };
 
-        //                responseDetails.StatusCode = HttpStatusCode.BadRequest;
-        //                responseDetails.Message = "The scheduled date and time for the meeting have already passed.";
-        //                return responseDetails;
+            if (!string.IsNullOrEmpty(resolutionLink))
+            {
+                var resolutionApproval = _dbContext.ResolutionDetails
+                    .FirstOrDefault(r => (r.AcceptLink == resolutionLink || r.RejectLink == resolutionLink) && r.ResolutionStatus != Constant.ResolutionStatus.Pending);
 
-        //            }
+                if (resolutionApproval != null)
+                {
+                    var grievance = await _dbContext.GrievanceMasters
+                        .FirstOrDefaultAsync(x => x.Id == resolutionApproval.GrievanceMasterId);
 
+                    if (grievance == null)
+                    {
+                        responseDetails.Message = "Grievance record not found.";
+                        return responseDetails;
+                    }
 
-        //            getRejectLink.GettingConfirmationStatus = "rejected";
-        //            getRejectLink.ConfirmationDate = DateTime.Now;
-        //            getRejectLink.UpdatedDate = DateTime.Now;
-        //            getRejectLink.UpdatedBy = getRejectLink.WhomeToMeet;
-        //            getRejectLink.IsLinkActive = false;
-        //            getRejectLink.UpdatedDate = DateTime.Now;
-        //            context.Update(getRejectLink);
-        //            context.SaveChanges();
+                    DateTime resolutionDeadline = resolutionApproval.CreatedDate?.AddDays(7) ?? DateTime.MinValue;
+                    if (DateTime.Now > resolutionDeadline)
+                    {
+                        resolutionApproval.ResolutionStatus = Constant.ResolutionStatus.Expired;
+                        _dbContext.ResolutionDetails.Update(resolutionApproval);
+                        _dbContext.SaveChanges();
 
+                        responseDetails.StatusCode = HttpStatusCode.BadRequest;
+                        responseDetails.Message = "The resolution response deadline has passed.";
+                        return responseDetails;
+                    }
 
-        //            var emp = await _empRepository.GetEmployeeDetailsWithEmpCode(vister.WhomeToMeet);
+                    if (resolutionApproval.AcceptLink == resolutionLink)
+                    {
+                        resolutionApproval.ResolutionStatus = Constant.ResolutionStatus.Accepted;
+                        responseDetails.Message = "You have accepted the resolution.";
+                    }
+                    else if (resolutionApproval.RejectLink == resolutionLink)
+                    {
+                        resolutionApproval.ResolutionStatus = Constant.ResolutionStatus.Rejected;
+                        responseDetails.Message = "You have rejected the resolution.";
+                    }
 
-        //            var empMobile = vister.MobileNo;
-        //            var developmentMode = configuration["DeploymentModes"]?.ToString()?.ToLower();
-        //            if (developmentMode == "cetpa")
-        //                empMobile = configuration["WhatsappTestNumber"]?.ToString();
+                    resolutionApproval.ModifyDate = DateTime.Now;
+                    _dbContext.Update(resolutionApproval);
+                    var updateCount = _dbContext.SaveChanges();
 
-        //            CultureInfo cultureInfo = Thread.CurrentThread.CurrentCulture;
-        //            TextInfo textInfo = cultureInfo.TextInfo;
-        //            var visitorName = textInfo.ToTitleCase(vister.FirstName + " " + vister.MiddleName + " " + vister.LastName);
-        //            visitorName = Regex.Replace(visitorName, @"\s+", " ");
-        //            var requestWhatsapp = new SendWhatsApppMessageRequest()
-        //            {
-        //                MobileNo = empMobile,
-        //                Name = visitorName,
-        //                OrgName = vister.OrgName,
-        //                WhometoMeet = emp.empName,
-        //                MeetDate = vister.MeetDate.Value.ToString("dd/MM/yyyy"),
-        //                StartTime = vister.InTime.ToString().Substring(0, 5),
-        //                EndTime = vister.OutTime.ToString().Substring(0, 5),
-        //                Remarks = vister.PurposeOfVisit,
-        //                AcceptToken = getRejectLink.AcceptLink,
-        //                RejectToken = getRejectLink.RejectLink,
-        //            };
-        //            if (developmentMode != "cetpa")
-        //                await sendWhatsApp.SendWhatsAPPRejectConfirmation(requestWhatsapp);
+                    if (updateCount > 0 && resolutionApproval.ResolutionStatus == Constant.ResolutionStatus.Rejected)
+                    {
+                        if (grievance.Round == (int)Grievance_Utility.GrievanceRound.First)
+                            _ = StartSecondRound(grievance.Id, resolutionApproval.ResolverCode);
+                        else if (grievance.Round == (int)Grievance_Utility.GrievanceRound.Second)
+                            _ = StartThirdRound(grievance.Id);
+                    }
+                    responseDetails.StatusCode = HttpStatusCode.OK;
+                }
+            }
 
-        //            responseDetails.StatusCode = HttpStatusCode.OK;
-        //            responseDetails.Message = "Your request has been rejected successfully.";
-        //            return responseDetails;
-        //        }
-
-        //    }
-        //    return responseDetails;
-        //}
+            return responseDetails;
+        }
 
         public async Task<ResponseModel> GrievanceDetailsAsync(int grievanceId, string baseUrl)
         {
@@ -621,7 +736,7 @@ namespace Grievance_BAL.Services
             return responseModel;
         }
 
-        public async Task<ResponseModel> GrievanceHistory(int grievanceId, string baseUrl)
+        public async Task<ResponseModel> GrievanceHistoryAsync(int grievanceId, string baseUrl)
         {
             ResponseModel responseModel = new ResponseModel
             {
@@ -638,7 +753,7 @@ namespace Grievance_BAL.Services
 
                 List<GrievanceProcessChanges> dtoAllChanges = new List<GrievanceProcessChanges>();
                 // List to store all changes
-                List<GrievanceChange> allChanges = new List<GrievanceChange>();
+                //List<GrievanceChange> allChanges = new List<GrievanceChange>();
                 List<CommentDetailsModel> commentList = new List<CommentDetailsModel>();
                 GrievanceProcessChanges processChanges = new GrievanceProcessChanges();
 
@@ -662,7 +777,7 @@ namespace Grievance_BAL.Services
                         commentList.Add(comment);
                     }
                 }
-                processChanges.ChangeList = allChanges;
+                //processChanges.ChangeList = allChanges;
                 processChanges.CommentDetails = commentList;
                 dtoAllChanges.Add(processChanges);
 
@@ -683,7 +798,7 @@ namespace Grievance_BAL.Services
                 for (int i = 0; i < allProcesses.Count; i++)
                 {
                     // List to store all changes
-                    List<GrievanceChange> allChanges = new List<GrievanceChange>();
+                    //List<GrievanceChange> allChanges = new List<GrievanceChange>();
                     List<CommentDetailsModel> commentList = new List<CommentDetailsModel>();
                     GrievanceProcessChanges processChanges = new GrievanceProcessChanges();
 
@@ -708,28 +823,28 @@ namespace Grievance_BAL.Services
                         }
                     }
 
-                    var processCount = $"Process {i}";
-                    if (i > 0)
-                    {
-                        var currentRow = allProcesses[i];
-                        var previousRow = allProcesses[i - 1];
-                        var changes = CompareRows(previousRow, currentRow);
-                        allChanges.AddRange(changes.Select(change => new GrievanceChange
-                        {
-                            Column = change.Column,
-                            OldValue = change.OldValue,
-                            NewValue = change.NewValue,
-                            ProcessCount = processCount
-                        }));
+                    //var processCount = $"Process {i}";
+                    //if (i > 0)
+                    //{
+                    //    var currentRow = allProcesses[i];
+                    //    var previousRow = allProcesses[i - 1];
+                    //    var changes = CompareRows(previousRow, currentRow);
+                    //    allChanges.AddRange(changes.Select(change => new GrievanceChange
+                    //    {
+                    //        Column = change.Column,
+                    //        OldValue = change.OldValue,
+                    //        NewValue = change.NewValue,
+                    //        ProcessCount = processCount
+                    //    }));
 
-                        processChanges.ChangeBy = empList.Find(a => a.empId == Convert.ToInt32(allProcesses[i - 1].CreatedBy))?.empName ?? string.Empty;
-                        processChanges.CaseName = processCount;
-                        processChanges.ModifyDate = allProcesses[i - 1].CreatedDate;
-                    }
+                    //    processChanges.ChangeBy = empList.Find(a => a.empId == Convert.ToInt32(allProcesses[i - 1].CreatedBy))?.empName ?? string.Empty;
+                    //    processChanges.CaseName = processCount;
+                    //    processChanges.ModifyDate = allProcesses[i - 1].CreatedDate;
+                    //}
 
                     processChanges.GrievanceId = allProcesses[i].Id;
                     processChanges.CommentDetails = commentList;
-                    processChanges.ChangeList = allChanges;
+                    //processChanges.ChangeList = allChanges;
                     dtoAllChanges.Add(processChanges);
                 }
                 responseModel.Data = dtoAllChanges;
@@ -746,28 +861,28 @@ namespace Grievance_BAL.Services
         }
 
         // Function to compare two rows and return the changes
-        private List<GrievanceChange> CompareRows(GrievanceProcess previousRow, GrievanceProcess currentRow)
-        {
-            List<GrievanceChange> changes = new List<GrievanceChange>();
+        //private List<GrievanceChange> CompareRows(GrievanceProcess previousRow, GrievanceProcess currentRow)
+        //{
+        //    List<GrievanceChange> changes = new List<GrievanceChange>();
 
-            var properties = typeof(GrievanceProcess).GetProperties();
-            foreach (var property in properties)
-            {
-                var columnName = property.Name;
-                var oldValue = property.GetValue(previousRow);
-                var newValue = property.GetValue(currentRow);
+        //    var properties = typeof(GrievanceProcess).GetProperties();
+        //    foreach (var property in properties)
+        //    {
+        //        var columnName = property.Name;
+        //        var oldValue = property.GetValue(previousRow);
+        //        var newValue = property.GetValue(currentRow);
 
-                if (!object.Equals(oldValue, newValue))
-                {
-                    changes.Add(new GrievanceChange
-                    {
-                        Column = columnName,
-                        OldValue = newValue,
-                        NewValue = oldValue
-                    });
-                }
-            }
-            return changes;
-        }
+        //        if (!object.Equals(oldValue, newValue))
+        //        {
+        //            changes.Add(new GrievanceChange
+        //            {
+        //                Column = columnName,
+        //                OldValue = newValue,
+        //                NewValue = oldValue
+        //            });
+        //        }
+        //    }
+        //    return changes;
+        //}
     }
 }
