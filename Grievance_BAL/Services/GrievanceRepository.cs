@@ -326,29 +326,32 @@ namespace Grievance_BAL.Services
                     }
                 }
 
-                // to send the resolution link to requestor
+                // to send the resolution link to requestor or sent to commitee mail
                 if (grievanceProcessObj.StatusId == (int)Grievance_Utility.GrievanceStatus.Resolved)
                 {
-                    ResolutionDetail resolutionDetail = new ResolutionDetail
+                    if (grievanceMaster.Round < 3)
                     {
-                        UserCode = grievanceMaster?.UserCode ?? string.Empty,
-                        UserEmail = grievanceMaster?.UserEmail ?? string.Empty,
+                        ResolutionDetail resolutionDetail = new ResolutionDetail
+                        {
+                            UserCode = grievanceMaster?.UserCode ?? string.Empty,
+                            UserEmail = grievanceMaster?.UserEmail ?? string.Empty,
 
-                        GrievanceMasterId = grievanceMaster?.Id ?? 0,
-                        GrievanceProcessId = grievanceProcessObj.Id,
-                        Round = grievanceMaster?.Round ?? 1,
+                            GrievanceMasterId = grievanceMaster?.Id ?? 0,
+                            GrievanceProcessId = grievanceProcessObj.Id,
+                            Round = grievanceMaster?.Round ?? 1,
 
-                        ResolutionDT = DateTime.Now,
-                        ResolverCode = grievanceModel.AssignedUserCode,
-                        ResolverDetails = grievanceModel.AssignedUserDetails,
-                        AcceptLink = grievanceModel.BaseUrl + "/" + Guid.NewGuid().ToString() + "$",
-                        RejectLink = grievanceModel.BaseUrl + "/" + Guid.NewGuid().ToString(),
-                        ResolutionStatus = Constant.ResolutionStatus.Pending,
+                            ResolutionDT = DateTime.Now,
+                            ResolverCode = grievanceModel.AssignedUserCode,
+                            ResolverDetails = grievanceModel.AssignedUserDetails,
+                            AcceptLink = grievanceModel.BaseUrl + "/" + Guid.NewGuid().ToString() + "$",
+                            RejectLink = grievanceModel.BaseUrl + "/" + Guid.NewGuid().ToString(),
+                            ResolutionStatus = Constant.ResolutionStatus.Pending,
 
-                        CreatedDate = DateTime.Now,
-                        CreatedBy = Convert.ToInt32(grievanceModel.AssignedUserCode)
-                    };
-                    await SendResolutionLink(resolutionDetail);
+                            CreatedDate = DateTime.Now,
+                            CreatedBy = Convert.ToInt32(grievanceModel.AssignedUserCode)
+                        };
+                        await SendResolutionLink(resolutionDetail);
+                    }
                 }
 
                 transaction.Commit();
@@ -524,7 +527,42 @@ namespace Grievance_BAL.Services
                     };
 
                     _dbContext.GrievanceProcesses.Add(grievanceProcessObj);
-                    await _dbContext.SaveChangesAsync();
+                    var isForwardedToCommitee = await _dbContext.SaveChangesAsync();
+                    if (isForwardedToCommitee > 0 && !string.IsNullOrEmpty(grievanceMaster.UserEmail))
+                    {
+                        List<string> _emailToId = new List<string>()
+                        {
+                            grievanceMaster.UserEmail
+                        };
+
+                        StringBuilder getEmailTemplate = new StringBuilder();
+                        var rootPath = Directory.GetCurrentDirectory();
+
+                        string htmlFilePath = rootPath + @"wwwroot\EmailTemplate\ForwardedToCommitee.html";
+                        using (StreamReader reader = File.OpenText(htmlFilePath))
+                        {
+                            getEmailTemplate.Append(reader.ReadToEnd());
+                        }
+
+                        var requestor = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(grievanceMaster.UserCode));
+                        var commiteeMemberDetail = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(committeeMember.UserCode));
+
+                        getEmailTemplate.Replace("{UserName}", requestor.empName);
+                        getEmailTemplate.Replace("{GrievanceId}", grievanceMaster.Id.ToString());
+                        getEmailTemplate.Replace("{CommitteeContactPerson}", committeeMember.UserDetails);
+                        getEmailTemplate.Replace("{CommitteeEmail}", commiteeMemberDetail.empEmail);
+                        getEmailTemplate.Replace("{CommitteePhone}", commiteeMemberDetail.empMobileNo);
+
+                        string emailSubject = $"Resolution Update: Grievance ID {grievanceMaster.Id} - Forwarded To Commitee";
+
+                        MailRequestModel mailRequest = new MailRequestModel()
+                        {
+                            EmailSubject = emailSubject,
+                            EmailBody = getEmailTemplate,
+                            EmailToId = _emailToId,
+                        };
+                        await _notificationRepository.SendNotification(mailRequest);
+                    }
 
                     await transaction.CommitAsync();
 
@@ -556,19 +594,22 @@ namespace Grievance_BAL.Services
                 if (!string.IsNullOrEmpty(resolutionDetail.UserEmail))
                 {
                     List<string> _emailToId = new List<string>()
-            {
-                resolutionDetail.UserEmail
-            };
+                    {
+                        resolutionDetail.UserEmail
+                    };
 
                     StringBuilder getEmailTemplate = new StringBuilder();
-                    string htmlFilePath = @"wwwroot\NotificationEmailTemplate\TemplateResolutionNotification.html";
+                    var rootPath = Directory.GetCurrentDirectory();
 
+                    string htmlFilePath = rootPath + @"wwwroot\EmailTemplate\ResolutionLink.html";
                     using (StreamReader reader = File.OpenText(htmlFilePath))
                     {
                         getEmailTemplate.Append(reader.ReadToEnd());
                     }
 
-                    getEmailTemplate.Replace("{UserName}", resolutionDetail.UserCode);
+                    var requestor = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(resolutionDetail.UserCode));
+
+                    getEmailTemplate.Replace("{UserName}", requestor.empName);
                     getEmailTemplate.Replace("{GrievanceId}", resolutionDetail.GrievanceMasterId.ToString());
                     getEmailTemplate.Replace("{Round}", resolutionDetail.Round.ToString());
                     getEmailTemplate.Replace("{AcceptLink}", resolutionDetail.AcceptLink);

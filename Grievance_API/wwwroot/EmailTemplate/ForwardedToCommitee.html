@@ -1,0 +1,61 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grievance Submitted</title>
+</head>
+<body style="background-color: #f4f4f4; margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 16px;">
+
+    <!-- Main Container -->
+    <table align="center" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);">
+
+        <!-- Header Section -->
+        <tr>
+            <td align="center" style="background-color: #007bff; color: white; text-align: center; padding: 15px; font-size: 20px; font-weight: bold; border-top-left-radius: 8px; border-top-right-radius: 8px;">
+                Grievance Submission Confirmation
+            </td>
+        </tr>
+
+        <!-- Content Section -->
+        <tr>
+            <td style="padding: 20px;">
+
+                <p>Dear <strong>{UserName}</strong>,</p>
+                <p>We acknowledge the receipt of your grievance with ID <strong>{GrievanceId}</strong>.</p>
+                <p>Your grievance has been **submitted to the committee** for further review. Please note that **all further communication and updates will be directly coordinated by the committee.**</p>
+
+                <p>For any inquiries, you may contact the committee using the details below:</p>
+
+                <table style="width: 100%; background-color: #f9f9f9; border-radius: 5px; padding: 10px;">
+                    <tr>
+                        <td><strong>Contact Person:</strong></td>
+                        <td>{CommitteeContactPerson}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Email:</strong></td>
+                        <td><a href="mailto:{CommitteeEmail}" style="color: #007bff; text-decoration: none;">{CommitteeEmail}</a></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Phone:</strong></td>
+                        <td>{CommitteePhone}</td>
+                    </tr>
+                </table>
+
+                <p>We appreciate your patience during this process. If you have any further concerns, feel free to reach out to the committee.</p>
+
+                <p>Thank you,<br><strong>Grievance Redressal Team</strong></p>
+            </td>
+        </tr>
+
+        <!-- Footer Section -->
+        <tr>
+            <td align="center" style="text-align: center; font-size: 14px; color: #777; padding: 15px;">
+                <p>This is an automated email, please do not reply.</p>
+            </td>
+        </tr>
+
+    </table>
+
+</body>
+</html>
