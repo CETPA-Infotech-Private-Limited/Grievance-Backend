@@ -69,17 +69,23 @@ namespace Grievance_BAL.Services
 
             if (isAddressal)
             {
-                var userGroups = await _dbContext.UserGroupMappings
+                var userGroups = _dbContext.UserGroupMappings
                     .Where(x => x.UserCode == userCode)
-                    .Select(x => x.GroupId)
-                    .ToListAsync();
+                    .Select(x => x.GroupId);
 
-                var groupUserCodes = await _dbContext.UserGroupMappings
+                var groupUserCodes = _dbContext.UserGroupMappings
                     .Where(x => userGroups.Contains(x.GroupId))
-                    .Select(x => x.UserCode)
-                    .ToListAsync();
+                    .Select(x => x.UserCode);
 
-                query = query.Where(g => groupUserCodes.Contains(g.UserCode));
+                var resolvedGrievanceIds = _dbContext.GrievanceProcesses
+                    .Where(gp => gp.CreatedBy == Convert.ToInt32(userCode) && gp.StatusId == (int)Grievance_Utility.GrievanceStatus.Resolved)
+                    .Select(gp => gp.GrievanceMasterId);
+
+                var masterGrievance = await (from gm in _dbContext.GrievanceMasters
+                                       join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
+                                       where (groupUserCodes.Contains(gp.AssignedUserCode) && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved) || resolvedGrievanceIds.Contains(gm.Id)
+                                       select gm.Id).ToListAsync();
+                query = query.Where(g => masterGrievance.Contains(g.Id));
             }
 
             if (isNodalOrCGM)
