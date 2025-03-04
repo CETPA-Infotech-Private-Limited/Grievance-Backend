@@ -12,5 +12,14 @@
         public int Over14Days { get; set; }
         public int ThisMonth { get; set; }
         public int Over30Days { get; set; }
+        public List<MonthGrievance> MonthlyGrievances { get; set; } = new();
     }
+
+    public class MonthGrievance
+    {
+        public string MonthName { get; set; } 
+        public int MonthInt { get; set; } 
+        public int TotalCount { get; set; } 
+    }
+
 }

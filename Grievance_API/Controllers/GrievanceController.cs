@@ -1,4 +1,5 @@
 ﻿using Grievance_BAL.IServices;
+using Grievance_BAL.Services;
 using Grievance_Model.DTOs.AppResponse;
 using Grievance_Model.DTOs.Grievance;
 using Microsoft.AspNetCore.Mvc;
@@ -59,5 +60,15 @@ namespace Grievance_API.Controllers
             return $"{request.Scheme}://{request.Host.Value}";
         }
 
+        [HttpGet("GetDashboardData")]
+        public async Task<ResponseModel> GetDashboardData(string userCode, string? unitId, string? department, string? year)
+        {
+            return await _grievanceRepository.GetDashboardDataAsync(userCode, unitId, department, year);
+        }
+        [HttpGet("GetMyDashboardData")]
+        public async Task<ResponseModel> GetMyDashboardData(string userCode)
+        {
+            return await _grievanceRepository.GetMyDashboardDataAsync(userCode);
+        }
     }
 }

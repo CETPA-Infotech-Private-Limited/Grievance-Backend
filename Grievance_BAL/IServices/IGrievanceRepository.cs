@@ -11,6 +11,8 @@ namespace Grievance_BAL.IServices
         Task<ResponseModel> VerifyResolutionLink(string resolutionLink, string? comment);
         Task<ResponseModel> GrievanceDetailsAsync(int grievanceId, string baseUrl);
         Task<ResponseModel> GrievanceHistoryAsync(int grievanceId, string baseUrl);
+        Task<ResponseModel> GetDashboardDataAsync(string userCode, string? unitId, string? department, string? year);
+        Task<ResponseModel> GetMyDashboardDataAsync(string userCode);
 
     }
 }
