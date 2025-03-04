@@ -47,7 +47,6 @@ namespace Grievance_BAL.Services
             if (!string.IsNullOrEmpty(empCode) && !string.IsNullOrEmpty(token))
             {
                 HttpClient client = new HttpClient();
-                var key = configuration["TokenKey"];
                 client.BaseAddress = new Uri(BaseUrl + "/Login/IsValid?username=" + empCode + "&token=" + token + "");
                 client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
                 HttpResponseMessage response = client.PostAsync(client.BaseAddress, null).Result;
@@ -62,29 +61,30 @@ namespace Grievance_BAL.Services
                             var employeeDetails = employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(empCode)).Result;
                             if (employeeDetails != null)
                             {
+                                var key = configuration["TokenKey"];
                                 var isSuperAdmin = configuration["SuperAdmin"]?.ToString() == employeeDetails.empCode;
                                 if (!isSuperAdmin)
                                 {
                                     var userRoles = (List<string>)(await userRepo.GetUserRolesAsync(empCode)).Data;
                                     if (userRoles.Count > 0)
                                     {
-
                                         string commaSeparatedRole = string.Join(", ", userRoles);
-
                                         var claims = new[]
                                                          {
                                               new Claim("Roles", commaSeparatedRole),
-                                              new Claim("unique_name",employeeDetails.empName),
                                               new Claim("EmpCode", employeeDetails.empCode),
+                                              new Claim("empId", employeeDetails.empId.ToString()),
+                                              new Claim("email", employeeDetails.empEmail),
+                                              new Claim("unique_name",employeeDetails.empName),
+                                              new Claim("Department",  employeeDetails.department),
                                               new Claim("Designation", employeeDetails.designation),
-                                              new Claim("Unit", employeeDetails.units),
                                               new Claim("unitId", employeeDetails.unitId.ToString()),
-                                              new Claim("Lavel", employeeDetails.lavel),
-                                              new Claim("SSOToken", token),
-                                              new Claim("Department",  employeeDetails.department)};
-
+                                              new Claim("Unit", employeeDetails.units),
+                                              new Claim("Grade", employeeDetails.lavel),
+                                              new Claim("SSOToken", token)
+                                        };
+                                        
                                         var Tokens = GenerateJwtUsingCustomClaims(key, claims, 30);
-
                                         if (Tokens != null)
                                         {
                                             responseModel.Message = "token successfully return.";

@@ -26,13 +26,15 @@ namespace Grievance_BAL.Services
     {
         private readonly GrievanceDbContext _dbContext;
         private readonly IEmployeeRepository _employeeRepository;
+        private readonly IUserRepository _userRepository;
         private readonly ICommonRepository _common;
         private readonly INotificationRepository _notificationRepository;
         private readonly IConfiguration _configuration;
-        public GrievanceRepository(GrievanceDbContext dbContext, IEmployeeRepository employeeRepository, ICommonRepository common, INotificationRepository notificationRepository, IConfiguration configuration)
+        public GrievanceRepository(GrievanceDbContext dbContext, IEmployeeRepository employeeRepository, IUserRepository userRepository, ICommonRepository common, INotificationRepository notificationRepository, IConfiguration configuration)
         {
             _dbContext = dbContext;
             _employeeRepository = employeeRepository;
+            _userRepository = userRepository;
             _common = common;
             _notificationRepository = notificationRepository;
             _configuration = configuration;
@@ -57,13 +59,18 @@ namespace Grievance_BAL.Services
                 };
             }
 
-            var userRoles = await _dbContext.UserRoleMappings
-                .Where(x => x.UserCode == userCode)
-                .Select(x => new { x.Role.RoleName, x.UnitId })
-                .ToListAsync();
+            var appRoles = (List<string>)(await _userRepository.GetUserRolesAsync(userCode)).Data ?? new List<string>();
+            if (appRoles.Count == 1 && appRoles.First() == "User")
+            {
+                return new ResponseModel
+                {
+                    StatusCode = HttpStatusCode.NotFound,
+                    Message = "User is neither Addressal nor NodalOfficer/CGM."
+                };
+            }
 
-            bool isAddressal = userRoles.Any(r => r.RoleName == Constant.AppRoles.Addressal);
-            bool isNodalOrCGM = userRoles.Any(r => r.RoleName == Constant.AppRoles.NodalOfficer || r.RoleName == Constant.AppRoles.UnitCGM);
+            bool isAddressal = appRoles.Any(r => r == Constant.AppRoles.Addressal);
+            bool isNodalOrCGM = appRoles.Any(r => r == Constant.AppRoles.NodalOfficer || r == Constant.AppRoles.UnitCGM);
 
             IQueryable<GrievanceMaster> query = _dbContext.GrievanceMasters.AsQueryable();
 
@@ -71,11 +78,11 @@ namespace Grievance_BAL.Services
             {
                 var userGroups = _dbContext.UserGroupMappings
                     .Where(x => x.UserCode == userCode)
-                    .Select(x => x.GroupId);
+                    .Select(x => new { x.GroupId, x.UnitId });
 
-                var groupUserCodes = _dbContext.UserGroupMappings
-                    .Where(x => userGroups.Contains(x.GroupId))
-                    .Select(x => x.UserCode);
+                var userDepartments = _dbContext.UserDepartmentMappings
+                    .Where(x => userGroups.Select(a => a.UnitId).Contains(x.UnitId) && x.UserCode == userCode)
+                    .Select(x => new { x.Department, x.UnitId, x.UserCode });
 
                 var resolvedGrievanceIds = _dbContext.GrievanceProcesses
                     .Where(gp => gp.CreatedBy == Convert.ToInt32(userCode) && gp.StatusId == (int)Grievance_Utility.GrievanceStatus.Resolved)
@@ -83,16 +90,20 @@ namespace Grievance_BAL.Services
 
                 var masterGrievance = await (from gm in _dbContext.GrievanceMasters
                                              join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
-                                             where (groupUserCodes.Contains(gp.AssignedUserCode) && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved) || resolvedGrievanceIds.Contains(gm.Id)
+                                             where (userDepartments.Select(a => a.Department).Contains(gm.Department)
+                                             && userDepartments.Select(a => a.UnitId).Contains(gm.UnitId)
+                                             && (gp.AssignedUserCode == userCode && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved)
+                                             || gp.StatusId == (int)Grievance_Utility.GrievanceStatus.Created)
+                                             || resolvedGrievanceIds.Contains(gm.Id)
                                              select gm.Id).ToListAsync();
                 query = query.Where(g => masterGrievance.Contains(g.Id));
             }
 
             if (isNodalOrCGM)
             {
-                var unitIds = userRoles.Select(r => r.UnitId).Distinct().ToList();
+                var userRoles = (await _dbContext.UserRoleMappings.Where(x => x.UserCode == userCode).Select(x => x.UnitId).ToListAsync()).Distinct();
 
-                query = query.Where(g => unitIds.Contains(g.UnitId));
+                query = query.Where(g => userRoles.Contains(g.UnitId));
             }
 
             query = query.OrderByDescending(g => g.CreatedDate);
@@ -169,9 +180,12 @@ namespace Grievance_BAL.Services
                     Description = grievanceModel.Description,
                     ServiceId = grievanceModel.ServiceId,
                     IsInternal = grievanceModel.IsInternal,
-                    UserEmail = grievanceModel.IsInternal ? userDetails.empEmail : grievanceModel.UserEmail,
                     UserCode = grievanceModel.IsInternal ? grievanceModel.UserCode : string.Empty,
+                    UserEmail = grievanceModel.IsInternal ? userDetails.empEmail : grievanceModel.UserEmail,
                     UserDetails = grievanceModel.IsInternal ? (!string.IsNullOrEmpty(userDetails.empName) ? userDetails.empName : "NA") + (!string.IsNullOrEmpty(userDetails.empCode) ? " (" + userDetails.empCode + ")" : "") + (!string.IsNullOrEmpty(userDetails.designation) ? " - " + userDetails.designation : "") + (!string.IsNullOrEmpty(userDetails.department) ? " | " + userDetails.department : "") : string.Empty,
+                    UnitId = userDetails.unitId.ToString(),
+                    UnitName = userDetails.units,
+                    Department = userDetails.department,
                     Round = (int)Grievance_Utility.GrievanceRound.First,
                     StatusId = (int)Grievance_Utility.GrievanceStatus.Created,
                     RowStatus = Grievance_Utility.RowStatus.Active,
@@ -185,7 +199,7 @@ namespace Grievance_BAL.Services
             else
             {
                 grievanceMaster.ServiceId = grievanceModel.ServiceId;
-                grievanceMaster.StatusId = grievanceModel.StatusId;
+                grievanceMaster.StatusId = grievanceModel.StatusId ?? grievanceMaster.StatusId;
 
                 grievanceMaster.ModifyBy = Convert.ToInt32(userDetails?.empCode);
                 grievanceMaster.ModifyDate = DateTime.Now;
@@ -198,13 +212,14 @@ namespace Grievance_BAL.Services
             {
                 string addressalCode = string.Empty;
                 string addressalDetail = string.Empty;
-
+                var FinalCommiteeUnit = _configuration["FinalCommiteeUnit"].ToString();
                 if (string.IsNullOrEmpty(grievanceModel.AssignedUserCode))
                 {
                     var addressal = (from sm in _dbContext.Services
                                      join ug in _dbContext.UserGroupMappings on sm.GroupMasterId equals ug.GroupId
                                      join ud in _dbContext.UserDepartmentMappings on ug.UserCode equals ud.UserCode
-                                     where ud.Department.Trim().ToLower() == userDetails.department.Trim().ToLower()
+                                     where (userDetails.unitId.ToString() != FinalCommiteeUnit
+                                     || ud.Department.Trim().ToLower() == userDetails.department.Trim().ToLower())
                                      && ug.GroupId == sm.GroupMasterId && ug.UnitId == userDetails.unitId.ToString()
                                      && sm.Id == grievanceMaster.ServiceId
                                      select new
@@ -240,8 +255,8 @@ namespace Grievance_BAL.Services
                     Title = grievanceModel.Title,
                     Description = grievanceModel.Description,
                     ServiceId = grievanceModel.ServiceId,
-                    Round = grievanceModel.Round,
-                    StatusId = grievanceMaster == null ? (int)Grievance_Utility.GrievanceStatus.Created : grievanceModel.StatusId,
+                    Round = grievanceModel.Round ?? grievanceMaster.Round,
+                    StatusId = grievanceMaster == null ? (int)Grievance_Utility.GrievanceStatus.Created : grievanceModel.StatusId ?? grievanceMaster.StatusId,
                     RowStatus = Grievance_Utility.RowStatus.Active,
 
                     AssignedUserCode = addressalCode,
@@ -463,15 +478,15 @@ namespace Grievance_BAL.Services
                     var requestorDetails = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(grievanceMaster.CreatedBy));
 
                     var committeeMember = await _dbContext.UserGroupMappings
-                        .Where(x => x.UnitId == requestorDetails.unitId.ToString() && x.Group.GroupName == "Committee")
+                        .Where(x => x.UnitId == requestorDetails.unitId.ToString() && x.Group.IsCommitee == true)
                         .Select(x => new { x.UserCode, x.UserDetails })
                         .FirstOrDefaultAsync();
 
-                    var finalCommiteeUnit = _configuration["FinalCommiteeUnit"].ToString();
                     if (committeeMember == null)
                     {
+                        var finalCommiteeUnit = _configuration["FinalCommiteeUnit"].ToString();
                         committeeMember = await _dbContext.UserGroupMappings
-                            .Where(x => x.UnitId == finalCommiteeUnit && x.Group.GroupName == "Committee")
+                            .Where(x => x.UnitId == finalCommiteeUnit && x.Group.IsCommitee == true)
                             .Select(x => new { x.UserCode, x.UserDetails })
                             .FirstOrDefaultAsync();
                     }
@@ -682,6 +697,12 @@ namespace Grievance_BAL.Services
                             _ = StartSecondRound(grievance.Id, resolutionApproval.ResolverCode);
                         else if (grievance.Round == (int)Grievance_Utility.GrievanceRound.Second)
                             _ = StartThirdRound(grievance.Id);
+                    }
+                    else if (updateCount > 0 && resolutionApproval.ResolutionStatus == Constant.ResolutionStatus.Accepted)
+                    {
+                        grievance.StatusId = (int)Grievance_Utility.GrievanceStatus.Closed;
+                        _dbContext.Update(grievance);
+                        _dbContext.SaveChanges();
                     }
                     responseDetails.StatusCode = HttpStatusCode.OK;
                 }

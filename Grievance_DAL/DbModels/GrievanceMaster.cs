@@ -9,20 +9,21 @@ namespace Grievance_DAL.DbModels
         [Key]
         public int Id { get; set; }
         public string Title { get; set; }
-        public string Description { get; set; }
+        public string? Description { get; set; }
 
         public int ServiceId { get; set; }
         [ForeignKey(nameof(ServiceId))]
         public virtual GroupMaster ServiceMaster { get; set; }
 
-        public bool IsInternal { get; set; }
-        public string UserEmail { get; set; }
+        public bool IsInternal { get; set; } = true;
 
         public string UserCode { get; set; }  
-        public string UserDetails { get; set; }
+        public string? UserEmail { get; set; }
+        public string? UserDetails { get; set; }
 
-        public string UnitId { get; set; }
-        public string UnitName { get; set; }
+        public string? UnitId { get; set; }
+        public string? UnitName { get; set; }
+        public string? Department { get; set; }
 
         public int Round { get; set; } = (int)GrievanceRound.First; 
 

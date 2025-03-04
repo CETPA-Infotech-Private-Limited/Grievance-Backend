@@ -26,7 +26,7 @@ namespace Grievance_API.Controllers
             return await _grievanceRepository.MyGrievanceListAsync(userCode, pageNumber, pageSize);
         }
         [HttpPost("AddUpdateGrievance")]
-        public async Task<ResponseModel> AddUpdateGrievance([FromBody] GrievanceProcessDTO grievanceModel)
+        public async Task<ResponseModel> AddUpdateGrievance([FromForm] GrievanceProcessDTO grievanceModel)
         {
             return await _grievanceRepository.AddUpdateGrievanceAsync(grievanceModel);
         }

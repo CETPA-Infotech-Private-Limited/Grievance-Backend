@@ -256,8 +256,8 @@ namespace Grievance_BAL.Services
                 {
                     "User"
                 };
-                var isAgent = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode).Any();
-                if (isAgent)
+                var isAddressal = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode).Any();
+                if (isAddressal)
                     empRoles.Add(Constant.AppRoles.Addressal);
 
                 empRoles.AddRange((await _dbContext.UserRoleMappings.Include(a => a.Role).Where(a => a.UserCode == empCode).Select(a => a.Role.RoleName).ToListAsync()).Distinct());
@@ -326,6 +326,9 @@ namespace Grievance_BAL.Services
                     {
                         GroupName = groupMaster.GroupName,
                         Description = groupMaster.Description ?? string.Empty,
+                        IsCommitee = groupMaster.IsCommitee,
+                        IsHOD = groupMaster.IsHOD,
+                        HODofGroupId = groupMaster.HODofGroupId,
                         CreatedBy = Convert.ToInt32(groupMaster.UserCode),
                         CreatedDate = DateTime.Now,
                         IsActive = true,
@@ -341,6 +344,9 @@ namespace Grievance_BAL.Services
                 {
                     existingGroup.GroupName = groupMaster.GroupName;
                     existingGroup.Description = groupMaster.Description ?? string.Empty;
+                    existingGroup.IsCommitee = groupMaster.IsCommitee;
+                    existingGroup.IsHOD = groupMaster.IsHOD;
+                    existingGroup.HODofGroupId = groupMaster.HODofGroupId;
                     existingGroup.ModifyBy = Convert.ToInt32(groupMaster.UserCode);
                     existingGroup.ModifyDate = DateTime.Now;
                     existingGroup.IsActive = true;
@@ -617,7 +623,7 @@ namespace Grievance_BAL.Services
             if (serviceMasters != null && serviceMasters.Count > 0)
             {
                 responseModel.StatusCode = HttpStatusCode.OK;
-                responseModel.Message = "All Ticket Service Details";
+                responseModel.Message = "All Service Details";
                 responseModel.Data = serviceMasters;
                 responseModel.DataLength = serviceMasters.Count;
             }

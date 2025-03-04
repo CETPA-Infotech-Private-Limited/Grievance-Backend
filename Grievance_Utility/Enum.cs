@@ -16,7 +16,7 @@
         Created = 1,
         InProgress = 2,
         AwatingInfo = 3,
-
-        Resolved = 10
+        Resolved = 4,
+        Closed = 5
     }
 }
