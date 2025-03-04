@@ -2,7 +2,7 @@
 {
     public class GrievanceProcessChanges
     {
-        public int GrievanceId { get; set; }
+        public int GrievanceProcessId { get; set; }
         //public List<GrievanceChange>? ChangeList { get; set; }
 
         public List<CommentDetailsModel>? CommentDetails { get; set; }

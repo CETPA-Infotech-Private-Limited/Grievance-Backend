@@ -1,10 +1,13 @@
-﻿using System.Data;
+﻿using System.ComponentModel.Design.Serialization;
+using System.Data;
+using System.Drawing.Printing;
 using System.Net;
 using System.Text.RegularExpressions;
 using Grievance_BAL.IServices;
 using Grievance_DAL.DatabaseContext;
 using Grievance_DAL.DbModels;
 using Grievance_Model.DTOs.AppResponse;
+using Grievance_Model.DTOs.Dashboard;
 using Grievance_Model.DTOs.Department;
 using Grievance_Model.DTOs.Employee;
 using Grievance_Model.DTOs.Group;
@@ -254,7 +257,7 @@ namespace Grievance_BAL.Services
             {
                 List<string> empRoles = new()
                 {
-                    "User"
+                    Constant.AppRoles.User
                 };
                 var isAddressal = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode).Any();
                 if (isAddressal)
@@ -748,6 +751,153 @@ namespace Grievance_BAL.Services
             return responseModel;
         }
 
+        public async Task<ResponseModel> GetAddressalListAsync(string? unitId)
+        {
+            ResponseModel responseModel = new ResponseModel
+            {
+                StatusCode = HttpStatusCode.BadRequest,
+                Message = "Bad Request"
+            };
+
+            var addressalUsers = (await _dbContext.UserGroupMappings.Where(a => (string.IsNullOrEmpty(unitId) || a.UnitId == unitId)).ToListAsync()).Distinct().GroupBy(a => a.UnitId).Select(add => new
+            {
+                UnitId = add.First().UnitId,
+                UnitName = add.First().UnitName,
+                MappedUserCode = add.Select(a => new
+                {
+                    UserCode = a.UserCode,
+                    UserDetails = a.UserDetails
+                })
+            });
+
+            if (addressalUsers == null)
+            {
+                return new ResponseModel
+                {
+                    StatusCode = HttpStatusCode.NotFound,
+                    Message = "Addressal not found."
+                };
+            }
+
+            responseModel.StatusCode = HttpStatusCode.OK;
+            responseModel.Message = "Addressal list retrieved successfully.";
+            responseModel.Data = addressalUsers;
+            responseModel.DataLength = addressalUsers.Count();
+
+            return responseModel;
+        }
+
+        public async Task<ResponseModel> GetDashboardDataAsync(string userCode, string? unitId, string? department, string? year)
+        {
+            ResponseModel responseModel = new ResponseModel
+            {
+                StatusCode = HttpStatusCode.BadRequest,
+                Message = "Bad Request"
+            };
+
+            if (string.IsNullOrEmpty(userCode))
+            {
+                return new ResponseModel
+                {
+                    StatusCode = HttpStatusCode.NotFound,
+                    Message = "User not found."
+                };
+            }
+
+            DashboardModel finalData = new();
+            var userAllRole = (List<string>)(await GetUserRolesAsync(userCode)).Data ?? new List<string>();
+
+            IQueryable<GrievanceMaster> query = _dbContext.GrievanceMasters.AsQueryable();
+
+            if (!string.IsNullOrEmpty(unitId))
+                query = query.Where(a => a.UnitId == unitId);
+            if (!string.IsNullOrEmpty(department))
+                query = query.Where(a => a.Department == department);
+            if (!string.IsNullOrEmpty(year))
+            {
+                if (int.TryParse(year, out int yearInt))
+                {
+                    query = query.Where(a => a.CreatedDate.Value.Year == yearInt);
+                }
+            }
+
+            var startOfMonth = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+            var endOfMonth = startOfMonth.AddMonths(1).AddDays(-1);
+
+            if (userAllRole.Contains(Constant.AppRoles.SuperAdmin))
+            {
+                finalData.TotalGrievance = query.Count();
+                finalData.Pending = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Created).Count();
+                finalData.InProgress = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.InProgress).Count();
+                finalData.Resolved = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Resolved).Count();
+
+                var unresolvedQuery = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Created || a.StatusId == (int)Grievance_Utility.GrievanceStatus.InProgress);
+
+                finalData.Unresolved = unresolvedQuery.Count();
+                finalData.Over7Days = unresolvedQuery.Where(a => a.CreatedDate > DateTime.Now.AddDays(-7)).Count();
+                finalData.Over14Days = unresolvedQuery.Where(a => a.CreatedDate > DateTime.Now.AddDays(-14)).Count();
+                finalData.ThisMonth = unresolvedQuery.Where(a => a.CreatedDate >= startOfMonth && a.CreatedDate <= endOfMonth).Count();
+                finalData.Over30Days = unresolvedQuery.Where(a => a.CreatedDate < startOfMonth).Count();
+            }
+            else if (userAllRole.Contains(Constant.AppRoles.NodalOfficer) || userAllRole.Contains(Constant.AppRoles.UnitCGM) || userAllRole.Contains(Constant.AppRoles.Admin))
+            {
+                finalData.TotalGrievance = query.Count();
+                finalData.Pending = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Created).Count();
+                finalData.InProgress = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.InProgress).Count();
+                finalData.Resolved = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Resolved).Count();
+
+                var unresolvedQuery = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Created || a.StatusId == (int)Grievance_Utility.GrievanceStatus.InProgress);
+
+                finalData.Unresolved = unresolvedQuery.Count();
+                finalData.Over7Days = unresolvedQuery.Where(a => a.CreatedDate > DateTime.Now.AddDays(-7)).Count();
+                finalData.Over14Days = unresolvedQuery.Where(a => a.CreatedDate > DateTime.Now.AddDays(-14)).Count();
+                finalData.ThisMonth = unresolvedQuery.Where(a => a.CreatedDate >= startOfMonth && a.CreatedDate <= endOfMonth).Count();
+                finalData.Over30Days = unresolvedQuery.Where(a => a.CreatedDate < startOfMonth).Count();
+            }
+            else if (userAllRole.Contains(Constant.AppRoles.Addressal))
+            {
+                var userGroups = _dbContext.UserGroupMappings
+                    .Where(x => x.UserCode == userCode)
+                    .Select(x => new { x.GroupId, x.UnitId });
+
+                var userDepartments = _dbContext.UserDepartmentMappings
+                    .Where(x => userGroups.Select(a => a.UnitId).Contains(x.UnitId) && x.UserCode == userCode)
+                    .Select(x => new { x.Department, x.UnitId, x.UserCode });
+
+                var resolvedGrievanceIds = _dbContext.GrievanceProcesses
+                    .Where(gp => gp.CreatedBy == Convert.ToInt32(userCode) && gp.StatusId == (int)Grievance_Utility.GrievanceStatus.Resolved)
+                    .Select(gp => gp.GrievanceMasterId);
+
+                var masterGrievance = await (from gm in _dbContext.GrievanceMasters
+                                             join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
+                                             where (userDepartments.Select(a => a.Department).Contains(gm.Department)
+                                             && userDepartments.Select(a => a.UnitId).Contains(gm.UnitId)
+                                             && (gp.AssignedUserCode == userCode && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved)
+                                             || gp.StatusId == (int)Grievance_Utility.GrievanceStatus.Created)
+                                             || resolvedGrievanceIds.Contains(gm.Id)
+                                             select gm.Id).ToListAsync();
+                query = query.Where(g => masterGrievance.Contains(g.Id));
+
+                finalData.TotalGrievance = query.Count();
+                finalData.Pending = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Created).Count();
+                finalData.InProgress = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.InProgress).Count();
+                finalData.Resolved = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Resolved).Count();
+
+                var unresolvedQuery = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Created || a.StatusId == (int)Grievance_Utility.GrievanceStatus.InProgress);
+
+                finalData.Unresolved = unresolvedQuery.Count();
+                finalData.Over7Days = unresolvedQuery.Where(a => a.CreatedDate > DateTime.Now.AddDays(-7)).Count();
+                finalData.Over14Days = unresolvedQuery.Where(a => a.CreatedDate > DateTime.Now.AddDays(-14)).Count();
+                finalData.ThisMonth = unresolvedQuery.Where(a => a.CreatedDate >= startOfMonth && a.CreatedDate <= endOfMonth).Count();
+                finalData.Over30Days = unresolvedQuery.Where(a => a.CreatedDate < startOfMonth).Count();
+            }
+
+            responseModel.StatusCode = HttpStatusCode.OK;
+            responseModel.Message = "Dashboard data retrieved successfully.";
+            responseModel.Data = finalData;
+
+            return responseModel;
+        }
 
     }
 }

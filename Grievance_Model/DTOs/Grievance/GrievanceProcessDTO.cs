@@ -5,8 +5,6 @@ namespace Grievance_Model.DTOs.Grievance
 {
     public class GrievanceProcessDTO
     {
-        public int? Id { get; set; } = 0;
-
         public int GrievanceMasterId { get; set; }
 
         public string Title { get; set; }

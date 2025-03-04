@@ -10,9 +10,11 @@ namespace Grievance_API.Controllers
     public class GrievanceController : ControllerBase
     {
         private readonly IGrievanceRepository _grievanceRepository;
-        public GrievanceController(IGrievanceRepository grievanceRepository)
+        private readonly IHttpContextAccessor _httpContextAccessor;
+        public GrievanceController(IGrievanceRepository grievanceRepository, IHttpContextAccessor httpContextAccessor)
         {
             _grievanceRepository = grievanceRepository;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         [HttpGet("GetGrievanceList")]
@@ -31,19 +33,31 @@ namespace Grievance_API.Controllers
             return await _grievanceRepository.AddUpdateGrievanceAsync(grievanceModel);
         }
         [HttpGet("VerifyResolutionLink")]
-        public async Task<ResponseModel> VerifyResolutionLink(string resolutionLink)
+        public async Task<ResponseModel> VerifyResolutionLink(string resolutionLink, string? comment)
         {
-            return await _grievanceRepository.VerifyResolutionLink(resolutionLink);
+            return await _grievanceRepository.VerifyResolutionLink(resolutionLink, comment);
         }
         [HttpGet("GrievanceDetails")]
-        public async Task<ResponseModel> GrievanceDetailsAsync(int grievanceId, string baseUrl)
+        public async Task<ResponseModel> GrievanceDetailsAsync(int grievanceId)
         {
+            var baseUrl = GetBaseUrl();
             return await _grievanceRepository.GrievanceDetailsAsync(grievanceId, baseUrl);
         }
         [HttpGet("GrievanceHistory")]
-        public async Task<ResponseModel> GrievanceHistory(int grievanceId, string baseUrl)
+        public async Task<ResponseModel> GrievanceHistory(int grievanceId)
         {
+            var baseUrl = GetBaseUrl();
             return await _grievanceRepository.GrievanceHistoryAsync(grievanceId, baseUrl);
         }
+
+        private string GetBaseUrl()
+        {
+            var request = _httpContextAccessor.HttpContext?.Request;
+            if (request == null)
+                return string.Empty;
+
+            return $"{request.Scheme}://{request.Host.Value}";
+        }
+
     }
 }

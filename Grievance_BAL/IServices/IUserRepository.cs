@@ -24,7 +24,8 @@ namespace Grievance_BAL.IServices
         Task<ResponseModel> AddUpdateServiceMasterAsync(ServiceMasterModel serviceMaster);
         Task<ResponseModel> ActiveInactiveServiceAsync(int serviceId, bool isActive);
         Task<ResponseModel> GetServiceDetailAsync(int serviceId);
+        Task<ResponseModel> GetAddressalListAsync(string? unitId);
+        Task<ResponseModel> GetDashboardDataAsync(string userCode, string? unitId, string? department, string? year);
 
     }
 }
-

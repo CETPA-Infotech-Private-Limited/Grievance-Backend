@@ -98,5 +98,15 @@ namespace Grievance_API.Controllers
         {
             return await userRepository.GetServiceDetailAsync(serviceId);
         }
+        [HttpGet("GetAddressalList")]
+        public async Task<ResponseModel> GetAddressalList(string? unitId)
+        {
+            return await userRepository.GetAddressalListAsync(unitId);
+        }
+        [HttpGet("GetDashboardData")]
+        public async Task<ResponseModel> GetDashboardData(string userCode, string? unitId, string? department, string? year)
+        {
+            return await userRepository.GetDashboardDataAsync(userCode, unitId, department, year);
+        }
     }
 }

@@ -19,6 +19,7 @@ using System.Globalization;
 using Microsoft.VisualBasic;
 using Microsoft.Extensions.Configuration;
 using System.Linq;
+using System.ComponentModel.Design;
 
 namespace Grievance_BAL.Services
 {
@@ -106,13 +107,43 @@ namespace Grievance_BAL.Services
                 query = query.Where(g => userRoles.Contains(g.UnitId));
             }
 
-            query = query.OrderByDescending(g => g.CreatedDate);
-
             int totalRecords = await query.CountAsync();
-            var grievances = await query
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
+            //var grievances = await query
+            //    .Skip((pageNumber - 1) * pageSize)
+            //    .Take(pageSize)
+            //    .ToListAsync();
+
+            var grievances = await (from gm in _dbContext.GrievanceMasters
+                              join gs in _dbContext.GrievanceProcesses on gm.Id equals gs.GrievanceMasterId
+                              where (gs.CreatedDate == _dbContext.GrievanceProcesses
+                                              .Where(t => t.GrievanceMasterId == gm.Id && t.Id == gs.Id)
+                                              .OrderByDescending(t => t.CreatedDate)
+                                              .Select(t => t.CreatedDate)
+                                              .FirstOrDefault())
+                                     && query.Select(a => a.Id).Contains(gm.Id)
+                              select new
+                              {
+                                  Id = gm.Id,
+                                  Title = gm.Title,
+                                  Description = gm.Description,
+                                  ServiceId = gm.ServiceId,
+                                  IsInternal = gm.IsInternal,
+                                  UserCode = gm.UserCode,
+                                  UserEmail = gm.UserEmail,
+                                  UserDetails = gm.UserDetails,
+                                  UnitId = gm.UnitId ,
+                                  UnitName = gm.UnitName ,
+                                  Department  = gm.Department,
+                                  Round = gm.Round,
+                                  StatusId = gm.StatusId,
+                                  RowStatus = gm.RowStatus,
+                                  AssignedUserCode = gs.AssignedUserCode,
+                                  AssignedUserDetails = gs.AssignedUserDetails,
+                                  CreatedDate = gm.CreatedDate,
+                                  CreatedBy = gm.CreatedBy,
+                                  ModifiedDate = gs.CreatedDate,
+                                  ModifiedBy = gs.CreatedBy
+                              }).Distinct().Skip((pageNumber - 1) * pageSize).Take(pageSize).OrderByDescending(g => g.CreatedDate).ToListAsync();
 
             responseModel.StatusCode = HttpStatusCode.OK;
             responseModel.Message = "Grievance list retrieved successfully.";
@@ -139,13 +170,43 @@ namespace Grievance_BAL.Services
             IQueryable<GrievanceMaster> query = _dbContext.GrievanceMasters
                 .Where(g => g.UserCode == userCode);
 
-            query = query.OrderByDescending(g => g.CreatedDate);
-
             int totalRecords = await query.CountAsync();
-            var grievances = await query
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
+            //var grievances = await query
+            //    .Skip((pageNumber - 1) * pageSize)
+            //    .Take(pageSize)
+            //    .ToListAsync();
+
+            var grievances = await (from gm in _dbContext.GrievanceMasters
+                              join gs in _dbContext.GrievanceProcesses on gm.Id equals gs.GrievanceMasterId
+                              where (gs.CreatedDate == _dbContext.GrievanceProcesses
+                                              .Where(t => t.GrievanceMasterId == gm.Id && t.Id == gs.Id)
+                                              .OrderByDescending(t => t.CreatedDate)
+                                              .Select(t => t.CreatedDate)
+                                              .FirstOrDefault())
+                                     && query.Select(a => a.Id).Contains(gm.Id)
+                              select new
+                              {
+                                  Id = gm.Id,
+                                  Title = gm.Title,
+                                  Description = gm.Description,
+                                  ServiceId = gm.ServiceId,
+                                  IsInternal = gm.IsInternal,
+                                  UserCode = gm.UserCode,
+                                  UserEmail = gm.UserEmail,
+                                  UserDetails = gm.UserDetails,
+                                  UnitId = gm.UnitId,
+                                  UnitName = gm.UnitName,
+                                  Department = gm.Department,
+                                  Round = gm.Round,
+                                  StatusId = gm.StatusId,
+                                  RowStatus = gm.RowStatus,
+                                  AssignedUserCode = gs.AssignedUserCode,
+                                  AssignedUserDetails = gs.AssignedUserDetails,
+                                  CreatedDate = gm.CreatedDate,
+                                  CreatedBy = gm.CreatedBy,
+                                  ModifiedDate = gs.CreatedDate,
+                                  ModifiedBy = gs.CreatedBy
+                              }).Distinct().Skip((pageNumber - 1) * pageSize).Take(pageSize).OrderByDescending(g => g.CreatedDate).ToListAsync();
 
             responseModel.StatusCode = HttpStatusCode.OK;
             responseModel.Message = "My grievances retrieved successfully.";
@@ -169,7 +230,7 @@ namespace Grievance_BAL.Services
                 Message = "Bad Request",
             };
 
-            IDbContextTransaction transaction = _dbContext.Database.BeginTransaction();
+            IDbContextTransaction transaction = await _dbContext.Database.BeginTransactionAsync();
             var grievanceMaster = _dbContext.GrievanceMasters.Where(x => x.Id == grievanceModel.GrievanceMasterId).FirstOrDefault();
             var userDetails = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(grievanceModel.UserCode));
             if (grievanceMaster == null)
@@ -201,7 +262,7 @@ namespace Grievance_BAL.Services
                 grievanceMaster.ServiceId = grievanceModel.ServiceId;
                 grievanceMaster.StatusId = grievanceModel.StatusId ?? grievanceMaster.StatusId;
 
-                grievanceMaster.ModifyBy = Convert.ToInt32(userDetails?.empCode);
+                grievanceMaster.ModifyBy = Convert.ToInt32(grievanceModel.UserCode);
                 grievanceMaster.ModifyDate = DateTime.Now;
 
                 _dbContext.GrievanceMasters.Update(grievanceMaster);
@@ -212,9 +273,9 @@ namespace Grievance_BAL.Services
             {
                 string addressalCode = string.Empty;
                 string addressalDetail = string.Empty;
-                var FinalCommiteeUnit = _configuration["FinalCommiteeUnit"].ToString();
                 if (string.IsNullOrEmpty(grievanceModel.AssignedUserCode))
                 {
+                    var FinalCommiteeUnit = _configuration["FinalCommiteeUnit"].ToString();
                     var addressal = (from sm in _dbContext.Services
                                      join ug in _dbContext.UserGroupMappings on sm.GroupMasterId equals ug.GroupId
                                      join ud in _dbContext.UserDepartmentMappings on ug.UserCode equals ud.UserCode
@@ -241,7 +302,6 @@ namespace Grievance_BAL.Services
 
                 if (string.IsNullOrEmpty(addressalCode))
                 {
-                    transaction.Rollback();
                     responseModel.StatusCode = HttpStatusCode.BadRequest;
                     responseModel.Message = "No addressal found for this department of category.";
 
@@ -343,7 +403,7 @@ namespace Grievance_BAL.Services
                     }
                 }
 
-                transaction.Commit();
+                await transaction.CommitAsync();
 
                 responseModel.StatusCode = HttpStatusCode.OK;
                 responseModel.Message = "Grievance created successfully.";
@@ -357,7 +417,7 @@ namespace Grievance_BAL.Services
             return responseModel;
         }
 
-        private async Task<ResponseModel> StartSecondRound(int grievanceMasterId, string lastResolverCode)
+        private async Task<ResponseModel> StartSecondRound(int grievanceMasterId, string lastResolverCode, string comment)
         {
             ResponseModel responseModel = new ResponseModel
             {
@@ -421,12 +481,29 @@ namespace Grievance_BAL.Services
                         RowStatus = Grievance_Utility.RowStatus.Active,
                         AssignedUserCode = nodalOfficer.UserCode,
                         AssignedUserDetails = nodalOfficer.UserDetails,
-                        CreatedBy = 0,
+                        CreatedBy = Convert.ToInt32(grievanceMaster.UserCode),
                         CreatedDate = DateTime.Now
                     };
 
                     _dbContext.GrievanceProcesses.Add(grievanceProcessObj);
                     await _dbContext.SaveChangesAsync();
+
+                    if (!string.IsNullOrEmpty(comment))
+                    {
+                        CommentDetail newComment = new CommentDetail()
+                        {
+                            CommentText = comment,
+                            CommentedBy = grievanceMaster.UserCode,
+                            CommentDate = DateTime.Now,
+                            CommentType = Constant.CommentType.GrievanceProcess,
+                            ReferenceId = grievanceProcessObj.Id,
+
+                            CreatedBy = Convert.ToInt32(grievanceMaster.UserCode),
+                            CreatedDate = DateTime.Now,
+                        };
+                        _dbContext.Comments.Add(newComment);
+                        _dbContext.SaveChanges();
+                    }
 
                     await transaction.CommitAsync();
 
@@ -445,7 +522,7 @@ namespace Grievance_BAL.Services
             return responseModel;
         }
 
-        private async Task<ResponseModel> StartThirdRound(int grievanceMasterId)
+        private async Task<ResponseModel> StartThirdRound(int grievanceMasterId, string comment)
         {
             ResponseModel responseModel = new ResponseModel
             {
@@ -511,7 +588,7 @@ namespace Grievance_BAL.Services
                         RowStatus = Grievance_Utility.RowStatus.Active,
                         AssignedUserCode = committeeMember.UserCode,
                         AssignedUserDetails = committeeMember.UserDetails,
-                        CreatedBy = 0,
+                        CreatedBy = Convert.ToInt32(grievanceMaster.UserCode),
                         CreatedDate = DateTime.Now
                     };
 
@@ -527,7 +604,7 @@ namespace Grievance_BAL.Services
                         StringBuilder getEmailTemplate = new StringBuilder();
                         var rootPath = Directory.GetCurrentDirectory();
 
-                        string htmlFilePath = rootPath + @"wwwroot\EmailTemplate\ForwardedToCommitee.html";
+                        string htmlFilePath = rootPath + @"\wwwroot\EmailTemplate\ForwardedToCommitee.html";
                         using (StreamReader reader = File.OpenText(htmlFilePath))
                         {
                             getEmailTemplate.Append(reader.ReadToEnd());
@@ -551,6 +628,23 @@ namespace Grievance_BAL.Services
                             EmailToId = _emailToId,
                         };
                         await _notificationRepository.SendNotification(mailRequest);
+                    }
+
+                    if (!string.IsNullOrEmpty(comment))
+                    {
+                        CommentDetail newComment = new CommentDetail()
+                        {
+                            CommentText = comment,
+                            CommentedBy = grievanceMaster.UserCode,
+                            CommentDate = DateTime.Now,
+                            CommentType = Constant.CommentType.GrievanceProcess,
+                            ReferenceId = grievanceProcessObj.Id,
+
+                            CreatedBy = Convert.ToInt32(grievanceMaster.UserCode),
+                            CreatedDate = DateTime.Now,
+                        };
+                        _dbContext.Comments.Add(newComment);
+                        _dbContext.SaveChanges();
                     }
 
                     await transaction.CommitAsync();
@@ -578,69 +672,65 @@ namespace Grievance_BAL.Services
                 Message = "Bad Request"
             };
 
-            using (IDbContextTransaction transaction = _dbContext.Database.BeginTransaction())
+            if (!string.IsNullOrEmpty(resolutionDetail.UserEmail))
             {
-                if (!string.IsNullOrEmpty(resolutionDetail.UserEmail))
-                {
-                    List<string> _emailToId = new List<string>()
+                List<string> _emailToId = new List<string>()
                     {
                         resolutionDetail.UserEmail
                     };
 
-                    StringBuilder getEmailTemplate = new StringBuilder();
-                    var rootPath = Directory.GetCurrentDirectory();
+                StringBuilder getEmailTemplate = new StringBuilder();
+                var rootPath = Directory.GetCurrentDirectory();
 
-                    string htmlFilePath = rootPath + @"wwwroot\EmailTemplate\ResolutionLink.html";
-                    using (StreamReader reader = File.OpenText(htmlFilePath))
-                    {
-                        getEmailTemplate.Append(reader.ReadToEnd());
-                    }
+                string htmlFilePath = rootPath + @"\wwwroot\EmailTemplate\ResolutionLink.html";
+                using (StreamReader reader = File.OpenText(htmlFilePath))
+                {
+                    getEmailTemplate.Append(reader.ReadToEnd());
+                }
 
-                    var requestor = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(resolutionDetail.UserCode));
+                var requestor = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(resolutionDetail.UserCode));
 
-                    getEmailTemplate.Replace("{UserName}", requestor.empName);
-                    getEmailTemplate.Replace("{GrievanceId}", resolutionDetail.GrievanceMasterId.ToString());
-                    getEmailTemplate.Replace("{Round}", resolutionDetail.Round.ToString());
-                    getEmailTemplate.Replace("{AcceptLink}", resolutionDetail.AcceptLink);
-                    getEmailTemplate.Replace("{RejectLink}", resolutionDetail.RejectLink);
+                getEmailTemplate.Replace("{UserName}", requestor.empName);
+                getEmailTemplate.Replace("{GrievanceId}", resolutionDetail.GrievanceMasterId.ToString());
+                getEmailTemplate.Replace("{Round}", resolutionDetail.Round.ToString());
+                getEmailTemplate.Replace("{AcceptLink}", resolutionDetail.AcceptLink);
+                getEmailTemplate.Replace("{RejectLink}", resolutionDetail.RejectLink);
 
-                    _dbContext.ResolutionDetails.Add(resolutionDetail);
-                    _dbContext.SaveChanges();
+                _dbContext.ResolutionDetails.Add(resolutionDetail);
+                _dbContext.SaveChanges();
 
-                    string emailSubject = $"Resolution Update: Grievance ID {resolutionDetail.GrievanceMasterId} - Awaiting Your Response";
+                string emailSubject = $"Resolution Update: Grievance ID {resolutionDetail.GrievanceMasterId} - Awaiting Your Response";
 
-                    MailRequestModel mailRequest = new MailRequestModel()
-                    {
-                        EmailSubject = emailSubject,
-                        EmailBody = getEmailTemplate,
-                        EmailToId = _emailToId,
-                    };
+                MailRequestModel mailRequest = new MailRequestModel()
+                {
+                    EmailSubject = emailSubject,
+                    EmailBody = getEmailTemplate,
+                    EmailToId = _emailToId,
+                };
 
-                    var sendMailDetails = await _notificationRepository.SendNotification(mailRequest);
+                var sendMailDetails = await _notificationRepository.SendNotification(mailRequest);
 
-                    if (sendMailDetails != null && sendMailDetails.StatusCode == HttpStatusCode.OK)
-                    {
-                        transaction.Commit();
-                        responseDetails.StatusCode = HttpStatusCode.OK;
-                        responseDetails.Message = "Resolution notification has been sent successfully.";
-                    }
-                    else
-                    {
-                        responseDetails.StatusCode = HttpStatusCode.BadRequest;
-                        responseDetails.Message = "Notification not sent due to an issue in SMTP. Contact the IT Team.";
-                    }
+                if (sendMailDetails != null && sendMailDetails.StatusCode == HttpStatusCode.OK)
+                {
+                    responseDetails.StatusCode = HttpStatusCode.OK;
+                    responseDetails.Message = "Resolution notification has been sent successfully.";
                 }
                 else
                 {
                     responseDetails.StatusCode = HttpStatusCode.BadRequest;
-                    responseDetails.Message = "User details are missing.";
+                    responseDetails.Message = "Notification not sent due to an issue in SMTP. Contact the IT Team.";
                 }
+            }
+            else
+            {
+                responseDetails.StatusCode = HttpStatusCode.BadRequest;
+                responseDetails.Message = "User details are missing.";
             }
 
             return responseDetails;
         }
 
-        public async Task<ResponseModel> VerifyResolutionLink(string resolutionLink)
+        public async Task<ResponseModel> VerifyResolutionLink(string resolutionLink, string? comment)
         {
             ResponseModel responseDetails = new ResponseModel()
             {
@@ -651,7 +741,7 @@ namespace Grievance_BAL.Services
             if (!string.IsNullOrEmpty(resolutionLink))
             {
                 var resolutionApproval = _dbContext.ResolutionDetails
-                    .FirstOrDefault(r => (r.AcceptLink == resolutionLink || r.RejectLink == resolutionLink) && r.ResolutionStatus != Constant.ResolutionStatus.Pending);
+                    .Where(r => (r.AcceptLink.Contains(resolutionLink) || r.RejectLink.Contains(resolutionLink)) && r.ResolutionStatus == Constant.ResolutionStatus.Pending).FirstOrDefault();
 
                 if (resolutionApproval != null)
                 {
@@ -694,9 +784,9 @@ namespace Grievance_BAL.Services
                     if (updateCount > 0 && resolutionApproval.ResolutionStatus == Constant.ResolutionStatus.Rejected)
                     {
                         if (grievance.Round == (int)Grievance_Utility.GrievanceRound.First)
-                            _ = StartSecondRound(grievance.Id, resolutionApproval.ResolverCode);
+                            _ = StartSecondRound(grievance.Id, resolutionApproval.ResolverCode, comment ?? string.Empty);
                         else if (grievance.Round == (int)Grievance_Utility.GrievanceRound.Second)
-                            _ = StartThirdRound(grievance.Id);
+                            _ = StartThirdRound(grievance.Id, comment ?? string.Empty);
                     }
                     else if (updateCount > 0 && resolutionApproval.ResolutionStatus == Constant.ResolutionStatus.Accepted)
                     {
@@ -731,7 +821,7 @@ namespace Grievance_BAL.Services
                         .OrderByDescending(gp => gp.Id)
                         .Select(gp => new
                         {
-                            GrievanceId = gp.GrievanceMasterId,
+                            GrievanceMasterId = gp.GrievanceMasterId,
                             GrievanceProcessId = gp.Id,
                             Title = grievanceDetail.Title,
                             Description = grievanceDetail.Description,
@@ -742,7 +832,7 @@ namespace Grievance_BAL.Services
                             Round = gp.Round,
                             AssignedUserCode = gp.AssignedUserCode,
                             AssignedUserDetails = gp.AssignedUserDetails,
-                            Status = grievanceDetail.StatusId,
+                            StatusId = gp.StatusId,
                             CreatedBy = grievanceDetail.UserCode,
                             CreatedDate = grievanceDetail.CreatedDate,
                             ModifiedBy = gp.CreatedBy,
@@ -803,7 +893,7 @@ namespace Grievance_BAL.Services
                         comment.CommentedDate = item.CreatedDate;
                         comment.CommentedById = item.CreatedBy;
                         comment.CommentType = item.CommentType;
-                        comment.CommentedByName = empList.Find(a => a.empId == Convert.ToInt32(item.CreatedBy))?.empName ?? string.Empty;
+                        comment.CommentedByName = empList.Find(a => a.empCode == item.CreatedBy.ToString())?.empName ?? string.Empty;
 
                         var findAttach = getAttachment.Where(x => x.ReferenceId == allProcesses[0].Id).Select(attach => baseUrl + attach.FilePath.Replace("wwwroot/", "").Replace("\\", "/")).ToList();
                         if (findAttach != null && findAttach.Count() > 0)
@@ -848,9 +938,9 @@ namespace Grievance_BAL.Services
                             comment.CommentedDate = item.CreatedDate;
                             comment.CommentedById = item.CreatedBy;
                             comment.CommentType = item.CommentType;
-                            comment.CommentedByName = empList.Find(a => a.empId == Convert.ToInt32(item.CreatedBy))?.empName ?? string.Empty;
+                            comment.CommentedByName = empList.Find(a => a.empCode == item.CreatedBy.ToString())?.empName ?? string.Empty;
 
-                            var findAttach = getAttachment.Where(x => x.ReferenceId == allProcesses[0].Id).Select(attach => baseUrl + attach.FilePath.Replace("wwwroot/", "").Replace("\\", "/")).ToList();
+                            var findAttach = getAttachment.Where(x => x.ReferenceId == allProcesses[i].Id).Select(attach => baseUrl + attach.FilePath.Replace("wwwroot/", "").Replace("\\", "/")).ToList();
                             if (findAttach != null && findAttach.Count() > 0)
                             {
                                 comment.Attachment = findAttach;
@@ -873,14 +963,19 @@ namespace Grievance_BAL.Services
                     //        ProcessCount = processCount
                     //    }));
 
-                    //    processChanges.ChangeBy = empList.Find(a => a.empId == Convert.ToInt32(allProcesses[i - 1].CreatedBy))?.empName ?? string.Empty;
+                    //    processChanges.ChangeBy = empList.Find(a => a.empCode == allProcesses[i - 1].CreatedBy.ToString())?.empName ?? string.Empty;
                     //    processChanges.CaseName = processCount;
                     //    processChanges.ModifyDate = allProcesses[i - 1].CreatedDate;
                     //}
 
-                    processChanges.GrievanceId = allProcesses[i].Id;
+                    processChanges.GrievanceProcessId = allProcesses[i].Id;
                     processChanges.CommentDetails = commentList;
                     //processChanges.ChangeList = allChanges;
+
+                    if (processChanges.CommentDetails.Count == 0)
+                    {
+                        continue;
+                    }
                     dtoAllChanges.Add(processChanges);
                 }
                 responseModel.Data = dtoAllChanges;
@@ -920,5 +1015,6 @@ namespace Grievance_BAL.Services
         //    }
         //    return changes;
         //}
+
     }
 }

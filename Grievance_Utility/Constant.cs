@@ -9,6 +9,7 @@
             public const string NodalOfficer = "NodalOfficer";
             public const string UnitCGM = "UnitCGM";
             public const string Addressal = "Addressal";
+            public const string User = "User";
         }
 
         public class CommentType
