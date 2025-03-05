@@ -62,15 +62,13 @@ namespace Grievance_BAL.Services
                             if (employeeDetails != null)
                             {
                                 var key = configuration["TokenKey"];
-                                var isSuperAdmin = configuration["SuperAdmin"]?.ToString() == employeeDetails.empCode;
-                                if (!isSuperAdmin)
+
+                                var userRoles = (List<string>)(await userRepo.GetUserRolesAsync(empCode)).Data;
+                                if (userRoles != null && userRoles.Count > 0)
                                 {
-                                    var userRoles = (List<string>)(await userRepo.GetUserRolesAsync(empCode)).Data;
-                                    if (userRoles.Count > 0)
-                                    {
-                                        string commaSeparatedRole = string.Join(", ", userRoles);
-                                        var claims = new[]
-                                                         {
+                                    string commaSeparatedRole = string.Join(", ", userRoles);
+                                    var claims = new List<Claim>
+                                        {
                                               new Claim("Roles", commaSeparatedRole),
                                               new Claim("EmpCode", employeeDetails.empCode),
                                               new Claim("empId", employeeDetails.empId.ToString()),
@@ -83,72 +81,13 @@ namespace Grievance_BAL.Services
                                               new Claim("Grade", employeeDetails.lavel),
                                               new Claim("SSOToken", token)
                                         };
-                                        
-                                        var Tokens = GenerateJwtUsingCustomClaims(key, claims, 30);
-                                        if (Tokens != null)
-                                        {
-                                            responseModel.Message = "token successfully return.";
-                                            responseModel.StatusCode = HttpStatusCode.OK;
-                                            responseModel.Data = Tokens;
-                                            return responseModel;
-                                        }
-                                        else
-                                        {
-                                            responseModel.Message = "Some error occured";
-                                            responseModel.StatusCode = HttpStatusCode.BadRequest;
-                                            responseModel.Data = responsedetails.Employee;
-                                            return responseModel;
-                                        }
 
-                                    }
-                                    else
+                                    foreach (var role in userRoles)
                                     {
-                                        var claims = new[]{
-                                          new Claim("Roles", "user"),
-                                          new Claim("unique_name",employeeDetails.empName),
-                                          new Claim("EmpCode", employeeDetails.empCode),
-                                          new Claim("Designation", employeeDetails.designation),
-                                          new Claim("Unit", employeeDetails.units),
-                                          new Claim("unitId", employeeDetails.unitId.ToString()),
-                                          new Claim("Lavel", employeeDetails.lavel),
-                                          new Claim("SSOToken", token),
-                                          new Claim("Department",  employeeDetails.department)
-                                        };
-
-                                        var Tokens = GenerateJwtUsingCustomClaims(key, claims, 30);
-
-                                        if (Tokens != null)
-                                        {
-                                            responseModel.Message = "token successfully return.";
-                                            responseModel.StatusCode = HttpStatusCode.OK;
-                                            responseModel.Data = Tokens;
-                                            return responseModel;
-                                        }
-                                        else
-                                        {
-                                            responseModel.Message = "Some error occured";
-                                            responseModel.StatusCode = HttpStatusCode.BadRequest;
-                                            responseModel.Data = responsedetails.Employee;
-                                            return responseModel;
-                                        }
+                                        claims.Add(new Claim(ClaimTypes.Role, role));
                                     }
-                                }
-                                else
-                                {
-                                    var claims = new[]{
-                                        new Claim("Roles", "superAdmin"),
-                                        new Claim("unique_name",employeeDetails.empName),
-                                        new Claim("EmpCode", employeeDetails.empCode),
-                                        new Claim("Designation", employeeDetails.designation),
-                                        new Claim("Unit", employeeDetails.units),
-                                        new Claim("unitId", employeeDetails.unitId.ToString()),
-                                        new Claim("Lavel", employeeDetails.lavel),
-                                        new Claim("SSOToken", token),
-                                        new Claim("Department",  employeeDetails.department)
-                                    };
 
                                     var Tokens = GenerateJwtUsingCustomClaims(key, claims, 30);
-
                                     if (Tokens != null)
                                     {
                                         responseModel.Message = "token successfully return.";
@@ -164,16 +103,14 @@ namespace Grievance_BAL.Services
                                         return responseModel;
                                     }
                                 }
-
                             }
                             else
                             {
                                 responseModel.StatusCode = HttpStatusCode.NotFound;
-                                responseModel.Message = "Employee is not found ,may be employee service is not working. ";
+                                responseModel.Message = "Employee is not found, may be employee service is not working. ";
                                 return responseModel;
                             }
                         }
-
                     }
                     else
                     {
@@ -190,9 +127,8 @@ namespace Grievance_BAL.Services
             }
 
             return responseModel;
-
         }
-        private string GenerateJwtUsingCustomClaims(string secretKey, Claim[] claims, int expiryMinutes)
+        private string GenerateJwtUsingCustomClaims(string secretKey, List<Claim> claims, int expiryMinutes)
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
