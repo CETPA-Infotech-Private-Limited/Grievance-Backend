@@ -71,12 +71,22 @@ namespace Grievance_BAL.Services
                 };
             }
 
+            bool isSuperAdmin = appRoles.Any(r => r == Constant.AppRoles.SuperAdmin);
             bool isAddressal = appRoles.Any(r => r == Constant.AppRoles.Addressal);
-            bool isNodalOrCGM = appRoles.Any(r => r == Constant.AppRoles.NodalOfficer || r == Constant.AppRoles.UnitCGM);
+            bool isNodalOrCGM = appRoles.Any(r => r == Constant.AppRoles.NodalOfficer || r == Constant.AppRoles.UnitCGM || r == Constant.AppRoles.Admin);
 
             IQueryable<GrievanceMaster> query = _dbContext.GrievanceMasters.AsQueryable();
 
-            if (isAddressal)
+            if (isSuperAdmin)
+            {
+                // to ignore the below conditions
+            }
+            else if (isNodalOrCGM)
+            {
+                var userRoles = (await _dbContext.UserRoleMappings.Where(r => r.UserCode == userCode && (r.Role.RoleName == Constant.AppRoles.NodalOfficer || r.Role.RoleName == Constant.AppRoles.UnitCGM || r.Role.RoleName == Constant.AppRoles.Admin)).Select(x => x.UnitId).ToListAsync()).Distinct();
+                query = query.Where(g => userRoles.Contains(g.UnitId));
+            }
+            else if (isAddressal)
             {
                 var userGroups = _dbContext.UserGroupMappings
                     .Where(x => x.UserCode == userCode)
@@ -101,50 +111,48 @@ namespace Grievance_BAL.Services
                 query = query.Where(g => masterGrievance.Contains(g.Id));
             }
 
-            if (isNodalOrCGM)
-            {
-                var userRoles = (await _dbContext.UserRoleMappings.Where(x => x.UserCode == userCode).Select(x => x.UnitId).ToListAsync()).Distinct();
-
-                query = query.Where(g => userRoles.Contains(g.UnitId));
-            }
-
             int totalRecords = await query.CountAsync();
+
             //var grievances = await query
             //    .Skip((pageNumber - 1) * pageSize)
             //    .Take(pageSize)
             //    .ToListAsync();
 
             var grievances = await (from gm in _dbContext.GrievanceMasters
-                              join gs in _dbContext.GrievanceProcesses on gm.Id equals gs.GrievanceMasterId
-                              where (gs.CreatedDate == _dbContext.GrievanceProcesses
-                                              .Where(t => t.GrievanceMasterId == gm.Id && t.Id == gs.Id)
-                                              .OrderByDescending(t => t.CreatedDate)
-                                              .Select(t => t.CreatedDate)
+                                    join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
+                                    where query.Select(a => a.Id).Contains(gm.Id)
+                                    && (gp.Id == _dbContext.GrievanceProcesses
+                                              .Where(t => t.GrievanceMasterId == gm.Id)
+                                              .OrderByDescending(t => t.Id)
+                                              .Select(t => t.Id)
                                               .FirstOrDefault())
-                                     && query.Select(a => a.Id).Contains(gm.Id)
-                              select new
-                              {
-                                  Id = gm.Id,
-                                  Title = gm.Title,
-                                  Description = gm.Description,
-                                  ServiceId = gm.ServiceId,
-                                  IsInternal = gm.IsInternal,
-                                  UserCode = gm.UserCode,
-                                  UserEmail = gm.UserEmail,
-                                  UserDetails = gm.UserDetails,
-                                  UnitId = gm.UnitId ,
-                                  UnitName = gm.UnitName ,
-                                  Department  = gm.Department,
-                                  Round = gm.Round,
-                                  StatusId = gm.StatusId,
-                                  RowStatus = gm.RowStatus,
-                                  AssignedUserCode = gs.AssignedUserCode,
-                                  AssignedUserDetails = gs.AssignedUserDetails,
-                                  CreatedDate = gm.CreatedDate,
-                                  CreatedBy = gm.CreatedBy,
-                                  ModifiedDate = gs.CreatedDate,
-                                  ModifiedBy = gs.CreatedBy
-                              }).Distinct().Skip((pageNumber - 1) * pageSize).Take(pageSize).OrderByDescending(g => g.CreatedDate).ToListAsync();
+                                    select new
+                                    {
+                                        Id = gm.Id,
+                                        Title = gm.Title,
+                                        Description = gm.Description,
+                                        ServiceId = gm.ServiceId,
+                                        IsInternal = gm.IsInternal,
+                                        UserCode = gm.UserCode,
+                                        UserEmail = gm.UserEmail,
+                                        UserDetails = gm.UserDetails,
+                                        UnitId = gm.UnitId,
+                                        UnitName = gm.UnitName,
+                                        Department = gm.Department,
+                                        Round = gm.Round,
+                                        StatusId = gm.StatusId,
+                                        RowStatus = gm.RowStatus,
+                                        AssignedUserCode = gp.AssignedUserCode ,
+                                        AssignedUserDetails = gp.AssignedUserDetails,
+                                        CreatedDate = gm.CreatedDate,
+                                        CreatedBy = gm.CreatedBy,
+                                        ModifiedDate = gp.CreatedDate,
+                                        ModifiedBy = gp.CreatedBy
+                                    })
+                        .OrderByDescending(g => g.CreatedDate)
+                        .Skip((pageNumber - 1) * pageSize)
+                        .Take(pageSize)
+                        .ToListAsync();
 
             responseModel.StatusCode = HttpStatusCode.OK;
             responseModel.Message = "Grievance list retrieved successfully.";
@@ -301,13 +309,13 @@ namespace Grievance_BAL.Services
                     addressalDetail = grievanceModel.AssignedUserDetails;
                 }
 
-                if (string.IsNullOrEmpty(addressalCode))
-                {
-                    responseModel.StatusCode = HttpStatusCode.BadRequest;
-                    responseModel.Message = "No addressal found for this department of category.";
+                //if (string.IsNullOrEmpty(addressalCode))
+                //{
+                //    responseModel.StatusCode = HttpStatusCode.BadRequest;
+                //    responseModel.Message = "No addressal found for this department of category.";
 
-                    return responseModel;
-                }
+                //    return responseModel;
+                //}
 
                 GrievanceProcess grievanceProcessObj = new GrievanceProcess()
                 {
@@ -320,8 +328,8 @@ namespace Grievance_BAL.Services
                     StatusId = grievanceMaster == null ? (int)Grievance_Utility.GrievanceStatus.Created : grievanceModel.StatusId ?? grievanceMaster.StatusId,
                     RowStatus = Grievance_Utility.RowStatus.Active,
 
-                    AssignedUserCode = addressalCode,
-                    AssignedUserDetails = addressalDetail,
+                    AssignedUserCode = string.IsNullOrEmpty(addressalCode) ? string.Empty : addressalCode,
+                    AssignedUserDetails = string.IsNullOrEmpty(addressalDetail) ? string.Empty : addressalDetail,
 
                     CreatedBy = Convert.ToInt32(grievanceModel.UserCode),
                     CreatedDate = DateTime.Now
@@ -330,9 +338,6 @@ namespace Grievance_BAL.Services
                 _dbContext.GrievanceProcesses.Add(grievanceProcessObj);
                 _dbContext.SaveChanges();
 
-                var grievanceProcessId = grievanceProcessObj.Id;
-
-                var commentId = 0;
                 if (!string.IsNullOrEmpty(grievanceModel.CommentText))
                 {
                     CommentDetail comment = new CommentDetail()
@@ -348,8 +353,6 @@ namespace Grievance_BAL.Services
                     };
                     _dbContext.Comments.Add(comment);
                     _dbContext.SaveChanges();
-
-                    commentId = comment.Id;
                 }
 
                 if (grievanceModel.Attachments != null && grievanceModel.Attachments.Count > 0)

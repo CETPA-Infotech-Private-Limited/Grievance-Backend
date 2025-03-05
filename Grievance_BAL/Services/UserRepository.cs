@@ -259,9 +259,13 @@ namespace Grievance_BAL.Services
                 {
                     Constant.AppRoles.User
                 };
-                var isAddressal = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode).Any();
+                var isAddressal = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode && a.Group.IsHOD != true).Any();
                 if (isAddressal)
                     empRoles.Add(Constant.AppRoles.Addressal);
+
+                var isHOD = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode && a.Group.IsHOD == true).Any();
+                if (isHOD)
+                    empRoles.Add(Constant.AppRoles.HOD);
 
                 empRoles.AddRange((await _dbContext.UserRoleMappings.Include(a => a.Role).Where(a => a.UserCode == empCode).Select(a => a.Role.RoleName).ToListAsync()).Distinct());
 
