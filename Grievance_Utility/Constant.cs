@@ -11,6 +11,7 @@
             public const string Addressal = "Addressal";
             public const string User = "User";
             public const string HOD = "HOD";
+            public const string Committee = "Committee";
         }
 
         public class CommentType

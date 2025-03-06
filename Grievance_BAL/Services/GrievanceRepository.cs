@@ -142,7 +142,7 @@ namespace Grievance_BAL.Services
                                         Round = gm.Round,
                                         StatusId = gm.StatusId,
                                         RowStatus = gm.RowStatus,
-                                        AssignedUserCode = gp.AssignedUserCode ,
+                                        AssignedUserCode = gp.AssignedUserCode,
                                         AssignedUserDetails = gp.AssignedUserDetails,
                                         CreatedDate = gm.CreatedDate,
                                         CreatedBy = gm.CreatedBy,
@@ -186,36 +186,36 @@ namespace Grievance_BAL.Services
             //    .ToListAsync();
 
             var grievances = await (from gm in _dbContext.GrievanceMasters
-                              join gs in _dbContext.GrievanceProcesses on gm.Id equals gs.GrievanceMasterId
-                              where (gs.CreatedDate == _dbContext.GrievanceProcesses
-                                              .Where(t => t.GrievanceMasterId == gm.Id && t.Id == gs.Id)
-                                              .OrderByDescending(t => t.CreatedDate)
-                                              .Select(t => t.CreatedDate)
-                                              .FirstOrDefault())
-                                     && query.Select(a => a.Id).Contains(gm.Id)
-                              select new
-                              {
-                                  Id = gm.Id,
-                                  Title = gm.Title,
-                                  Description = gm.Description,
-                                  ServiceId = gm.ServiceId,
-                                  IsInternal = gm.IsInternal,
-                                  UserCode = gm.UserCode,
-                                  UserEmail = gm.UserEmail,
-                                  UserDetails = gm.UserDetails,
-                                  UnitId = gm.UnitId,
-                                  UnitName = gm.UnitName,
-                                  Department = gm.Department,
-                                  Round = gm.Round,
-                                  StatusId = gm.StatusId,
-                                  RowStatus = gm.RowStatus,
-                                  AssignedUserCode = gs.AssignedUserCode,
-                                  AssignedUserDetails = gs.AssignedUserDetails,
-                                  CreatedDate = gm.CreatedDate,
-                                  CreatedBy = gm.CreatedBy,
-                                  ModifiedDate = gs.CreatedDate,
-                                  ModifiedBy = gs.CreatedBy
-                              }).Distinct().Skip((pageNumber - 1) * pageSize).Take(pageSize).OrderByDescending(g => g.CreatedDate).ToListAsync();
+                                    join gs in _dbContext.GrievanceProcesses on gm.Id equals gs.GrievanceMasterId
+                                    where (gs.CreatedDate == _dbContext.GrievanceProcesses
+                                                    .Where(t => t.GrievanceMasterId == gm.Id && t.Id == gs.Id)
+                                                    .OrderByDescending(t => t.CreatedDate)
+                                                    .Select(t => t.CreatedDate)
+                                                    .FirstOrDefault())
+                                           && query.Select(a => a.Id).Contains(gm.Id)
+                                    select new
+                                    {
+                                        Id = gm.Id,
+                                        Title = gm.Title,
+                                        Description = gm.Description,
+                                        ServiceId = gm.ServiceId,
+                                        IsInternal = gm.IsInternal,
+                                        UserCode = gm.UserCode,
+                                        UserEmail = gm.UserEmail,
+                                        UserDetails = gm.UserDetails,
+                                        UnitId = gm.UnitId,
+                                        UnitName = gm.UnitName,
+                                        Department = gm.Department,
+                                        Round = gm.Round,
+                                        StatusId = gm.StatusId,
+                                        RowStatus = gm.RowStatus,
+                                        AssignedUserCode = gs.AssignedUserCode,
+                                        AssignedUserDetails = gs.AssignedUserDetails,
+                                        CreatedDate = gm.CreatedDate,
+                                        CreatedBy = gm.CreatedBy,
+                                        ModifiedDate = gs.CreatedDate,
+                                        ModifiedBy = gs.CreatedBy
+                                    }).Distinct().Skip((pageNumber - 1) * pageSize).Take(pageSize).OrderByDescending(g => g.CreatedDate).ToListAsync();
 
             responseModel.StatusCode = HttpStatusCode.OK;
             responseModel.Message = "My grievances retrieved successfully.";
@@ -450,8 +450,11 @@ namespace Grievance_BAL.Services
                     _dbContext.Update(grievanceMaster);
                     _dbContext.SaveChanges();
 
-                    var lastResolverDetails = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(lastResolverCode));
-                    if (lastResolverDetails == null || lastResolverDetails.unitId != 0)
+                    //var lastResolverDetails = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(lastResolverCode));
+
+                    var resolverUnitId = _dbContext.UserRoleMappings.Where(a => a.Role.RoleName == Constant.AppRoles.Addressal && a.UserCode == lastResolverCode && (a.UnitId == grievanceMaster.UnitId || true)).Select(a => a.UnitId).FirstOrDefault();
+
+                    if (string.IsNullOrEmpty(resolverUnitId))
                     {
                         return new ResponseModel
                         {
@@ -461,7 +464,7 @@ namespace Grievance_BAL.Services
                     }
 
                     var nodalOfficer = await _dbContext.UserRoleMappings
-                        .Where(x => x.UnitId == lastResolverDetails.unitId.ToString() && x.Role.RoleName == Constant.AppRoles.NodalOfficer)
+                        .Where(x => x.UnitId == resolverUnitId && x.Role.RoleName == Constant.AppRoles.NodalOfficer)
                         .Select(x => new { x.UserCode, x.UserDetails })
                         .FirstOrDefaultAsync();
 
@@ -782,6 +785,7 @@ namespace Grievance_BAL.Services
                     }
 
                     resolutionApproval.ModifyDate = DateTime.Now;
+                    resolutionApproval.ModifyBy = grievance.CreatedBy;
                     _dbContext.Update(resolutionApproval);
                     var updateCount = _dbContext.SaveChanges();
 
@@ -796,7 +800,18 @@ namespace Grievance_BAL.Services
                     {
                         grievance.StatusId = (int)Grievance_Utility.GrievanceStatus.Closed;
                         _dbContext.Update(grievance);
-                        _dbContext.SaveChanges();
+
+                        var lastProcess = _dbContext.GrievanceProcesses.Where(a => a.GrievanceMasterId == grievance.Id).OrderByDescending(a => a.Id).FirstOrDefault();
+                        if (lastProcess != null)
+                        {
+                            lastProcess.Id = 0;
+                            lastProcess.AssignedUserCode = string.Empty;
+                            lastProcess.AssignedUserCode = string.Empty;
+                            lastProcess.StatusId = (int)Grievance_Utility.GrievanceStatus.Closed;
+
+                            _dbContext.Add(lastProcess);
+                            _dbContext.SaveChanges();
+                        }
                     }
                     responseDetails.StatusCode = HttpStatusCode.OK;
                 }

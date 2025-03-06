@@ -259,13 +259,17 @@ namespace Grievance_BAL.Services
                 {
                     Constant.AppRoles.User
                 };
-                var isAddressal = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode && a.Group.IsHOD != true).Any();
+                var isAddressal = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode && (!a.Group.IsHOD && !a.Group.IsCommitee)).Any();
                 if (isAddressal)
                     empRoles.Add(Constant.AppRoles.Addressal);
 
                 var isHOD = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode && a.Group.IsHOD == true).Any();
                 if (isHOD)
                     empRoles.Add(Constant.AppRoles.HOD);
+
+                var isCommitee = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode && a.Group.IsCommitee == true).Any();
+                if (isCommitee)
+                    empRoles.Add(Constant.AppRoles.Committee);
 
                 empRoles.AddRange((await _dbContext.UserRoleMappings.Include(a => a.Role).Where(a => a.UserCode == empCode).Select(a => a.Role.RoleName).ToListAsync()).Distinct());
 
@@ -326,7 +330,7 @@ namespace Grievance_BAL.Services
             };
             if (groupMaster != null)
             {
-                var existingGroup = _dbContext.Groups.Where(group => group.Id == groupMaster.Id || group.GroupName.ToLower().Trim() == groupMaster.GroupName.ToLower().Trim()).FirstOrDefault();
+                var existingGroup = _dbContext.Groups.Where(group => group.Id == groupMaster.Id /*|| (group.GroupName.ToLower().Trim() == groupMaster.GroupName.ToLower().Trim() && group.IsHOD == groupMaster.IsHOD && group.IsCommitee == groupMaster.IsCommitee)*/).FirstOrDefault();
                 if (existingGroup == null)
                 {
                     var newGroup = new GroupMaster()
@@ -431,78 +435,172 @@ namespace Grievance_BAL.Services
             return responseModel;
         }
 
+        //public async Task<ResponseModel> UpdateUserGroupMappingAsync(UserGroupMasterMappingModel mappings)
+        //{
+        //    ResponseModel responseModel = new ResponseModel()
+        //    {
+        //        StatusCode = HttpStatusCode.BadRequest,
+        //        Message = "Bad Request"
+        //    };
+
+        //    var multipleUnit = mappings.UnitId.Contains(",") ? mappings.UnitId.Split(",").ToList() : new List<string> { mappings.UnitId };
+        //    var multipleUnitName = mappings.UnitName.Contains(",") ? mappings.UnitName.Split(",").ToList() : new List<string> { mappings.UnitName };
+
+        //    var removeMapping = _dbContext.UserGroupMappings
+        //        .Where(a => a.GroupId == mappings.GroupMasterId &&
+        //                    multipleUnit.Contains(a.UnitId) &&
+        //                    (mappings.UserCodes == null || !mappings.UserCodes.Select(e => e.UserCode).Contains(a.UserCode)))
+        //        .ToList();
+
+        //    List<UserGroupMapping> newMapping = new();
+
+        //    if (mappings.UserCodes != null && mappings.UserCodes.Count > 0)
+        //    {
+        //        var excludeMapping = _dbContext.UserGroupMappings
+        //            .Where(a => a.GroupId == mappings.GroupMasterId &&
+        //                        multipleUnit.Contains(a.UnitId) &&
+        //                        mappings.UserCodes.Select(e => e.UserCode).Contains(a.UserCode))
+        //            .Select(a => new { a.UserCode, a.UnitId })
+        //            .ToList();
+
+        //        foreach (var emp in mappings.UserCodes)
+        //        {
+        //            for (int i = 0; i < multipleUnit.Count; i++)
+        //            {
+        //                var unitId = multipleUnit[i];
+        //                var unitName = multipleUnitName[i];
+
+        //                if (!excludeMapping.Any(b => b.UserCode == emp.UserCode && b.UnitId == unitId))
+        //                {
+        //                    newMapping.Add(new UserGroupMapping
+        //                    {
+        //                        GroupId = mappings.GroupMasterId,
+        //                        UnitId = unitId,
+        //                        UnitName = unitName,
+        //                        UserCode = emp.UserCode,
+        //                        UserDetails = emp.UserDetails
+        //                    });
+        //                }
+        //            }
+        //        }
+        //    }
+
+        //    if (removeMapping.Any())
+        //    {
+        //        _dbContext.UserGroupMappings.RemoveRange(removeMapping);
+        //    }
+
+        //    if (newMapping.Any())
+        //    {
+        //        await _dbContext.UserGroupMappings.AddRangeAsync(newMapping);
+        //    }
+
+        //    var resultCount = await _dbContext.SaveChangesAsync();
+        //    if (resultCount > 0)
+        //    {
+        //        responseModel.StatusCode = HttpStatusCode.OK;
+        //        responseModel.Message = "User GroupMaster Mapping Updated";
+        //        responseModel.Data = mappings;
+        //        responseModel.DataLength = mappings.UserCodes.Count;
+        //    }
+        //    else
+        //    {
+        //        responseModel.StatusCode = HttpStatusCode.NotModified;
+        //        responseModel.Message = "User GroupMaster Mapping Not Updated";
+        //    }
+
+        //    return responseModel;
+        //}
+
         public async Task<ResponseModel> UpdateUserGroupMappingAsync(UserGroupMasterMappingModel mappings)
         {
-            ResponseModel responseModel = new ResponseModel()
+            ResponseModel responseModel = new()
             {
                 StatusCode = HttpStatusCode.BadRequest,
                 Message = "Bad Request"
             };
 
-            var multipleUnit = mappings.UnitId.Contains(",") ? mappings.UnitId.Split(",").ToList() : new List<string> { mappings.UnitId };
-            var multipleUnitName = mappings.UnitName.Contains(",") ? mappings.UnitName.Split(",").ToList() : new List<string> { mappings.UnitName };
-
-            var removeMapping = _dbContext.UserGroupMappings
-                .Where(a => a.GroupId == mappings.GroupMasterId &&
-                            multipleUnit.Contains(a.UnitId) &&
-                            (mappings.UserCodes == null || !mappings.UserCodes.Select(e => e.UserCode).Contains(a.UserCode)))
-                .ToList();
-
-            List<UserGroupMapping> newMapping = new();
-
-            if (mappings.UserCodes != null && mappings.UserCodes.Count > 0)
+            if (mappings.GroupMasterId == 0 || string.IsNullOrEmpty(mappings.UnitId))
             {
-                var excludeMapping = _dbContext.UserGroupMappings
-                    .Where(a => a.GroupId == mappings.GroupMasterId &&
-                                multipleUnit.Contains(a.UnitId) &&
-                                mappings.UserCodes.Select(e => e.UserCode).Contains(a.UserCode))
-                    .Select(a => new { a.UserCode, a.UnitId })
-                    .ToList();
+                responseModel.Message = "GroupMasterId and UnitId are required";
+                return responseModel;
+            }
 
-                foreach (var emp in mappings.UserCodes)
+            var multipleUnit = mappings.UnitId.Split(',').Select(x => x.Trim()).ToList();
+            var multipleUnitName = mappings.UnitName.Split(',').Select(x => x.Trim()).ToList();
+
+            var userCodes = mappings.UserCodes?.Select(u => u.UserCode).ToList() ?? new List<string>();
+            var userDetailsDict = mappings.UserCodes?.ToDictionary(u => u.UserCode, u => u.UserDetails) ?? new Dictionary<string, string>();
+
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
+            {
+                List<UserGroupMapping> newMappings = new();
+
+                foreach (var unitId in multipleUnit)
                 {
-                    for (int i = 0; i < multipleUnit.Count; i++)
-                    {
-                        var unitId = multipleUnit[i];
-                        var unitName = multipleUnitName[i];
+                    var existingMappings = _dbContext.UserGroupMappings
+                        .Where(a => a.GroupId == mappings.GroupMasterId && a.UnitId == unitId)
+                        .ToList();
 
-                        if (!excludeMapping.Any(b => b.UserCode == emp.UserCode && b.UnitId == unitId))
+                    if (userCodes.Count == 0)
+                    {
+                        if (existingMappings.Any())
                         {
-                            newMapping.Add(new UserGroupMapping
+                            _dbContext.UserGroupMappings.RemoveRange(existingMappings);
+                        }
+                        continue;
+                    }
+
+                    var usersToRemove = existingMappings.Where(a => !userCodes.Contains(a.UserCode)).ToList();
+                    if (usersToRemove.Any())
+                    {
+                        _dbContext.UserGroupMappings.RemoveRange(usersToRemove);
+                    }
+
+                    var existingUserCodes = existingMappings.Select(a => a.UserCode).ToHashSet();
+
+                    foreach (var userCode in userCodes)
+                    {
+                        if (!existingUserCodes.Contains(userCode))
+                        {
+                            newMappings.Add(new UserGroupMapping
                             {
                                 GroupId = mappings.GroupMasterId,
                                 UnitId = unitId,
-                                UnitName = unitName,
-                                UserCode = emp.UserCode,
-                                UserDetails = emp.UserDetails
+                                UnitName = multipleUnitName[multipleUnit.IndexOf(unitId)],
+                                UserCode = userCode,
+                                UserDetails = userDetailsDict[userCode]
                             });
                         }
                     }
                 }
-            }
 
-            if (removeMapping.Any())
-            {
-                _dbContext.UserGroupMappings.RemoveRange(removeMapping);
-            }
+                if (newMappings.Any())
+                {
+                    await _dbContext.UserGroupMappings.AddRangeAsync(newMappings);
+                }
 
-            if (newMapping.Any())
-            {
-                await _dbContext.UserGroupMappings.AddRangeAsync(newMapping);
+                var resultCount = await _dbContext.SaveChangesAsync();
+                if (resultCount > 0)
+                {
+                    await transaction.CommitAsync();
+                    responseModel.StatusCode = HttpStatusCode.OK;
+                    responseModel.Message = "User Group Mapping Updated Successfully";
+                    responseModel.Data = mappings;
+                    responseModel.DataLength = newMappings.Count;
+                }
+                else
+                {
+                    responseModel.StatusCode = HttpStatusCode.NotModified;
+                    responseModel.Message = "No changes made to User Group Mapping";
+                }
             }
-
-            var resultCount = await _dbContext.SaveChangesAsync();
-            if (resultCount > 0)
+            catch (Exception ex)
             {
-                responseModel.StatusCode = HttpStatusCode.OK;
-                responseModel.Message = "User GroupMaster Mapping Updated";
-                responseModel.Data = mappings;
-                responseModel.DataLength = mappings.UserCodes.Count;
-            }
-            else
-            {
-                responseModel.StatusCode = HttpStatusCode.NotModified;
-                responseModel.Message = "User GroupMaster Mapping Not Updated";
+                await transaction.RollbackAsync();
+                responseModel.StatusCode = HttpStatusCode.InternalServerError;
+                responseModel.Message = $"Error: {ex.Message}";
             }
 
             return responseModel;
@@ -763,12 +861,14 @@ namespace Grievance_BAL.Services
                 Message = "Bad Request"
             };
 
-            var addressalUsers = (await _dbContext.UserGroupMappings.Where(a => (string.IsNullOrEmpty(unitId) || a.UnitId == unitId)).ToListAsync()).Distinct().GroupBy(a => a.UnitId).Select(add => new
+            var addressalUsers = (await _dbContext.UserGroupMappings.Where(a => (string.IsNullOrEmpty(unitId) || a.UnitId == unitId)).Include(a=>a.Group).ToListAsync()).Distinct().GroupBy(a => a.UnitId).Select(add => new
             {
                 UnitId = add.First().UnitId,
                 UnitName = add.First().UnitName,
                 MappedUserCode = add.Select(a => new
                 {
+                    GroupId = a.GroupId,
+                    GroupDetails = a.Group,
                     UserCode = a.UserCode,
                     UserDetails = a.UserDetails
                 })
