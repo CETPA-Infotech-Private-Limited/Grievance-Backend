@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Grievance_DAL.DbModels
 {
@@ -6,6 +7,10 @@ namespace Grievance_DAL.DbModels
     {
         [Key]
         public int Id { get; set; }
+
+        public int? GroupId { get; set; }
+        [ForeignKey(nameof(GroupId))]
+        public virtual GroupMaster? Group { get; set; }
 
         public string UnitId { get; set; }
         public string UnitName { get; set; }

@@ -11,9 +11,9 @@ namespace Grievance_DAL.DbModels
         public string Title { get; set; }
         public string? Description { get; set; }
 
-        public int ServiceId { get; set; }
-        [ForeignKey(nameof(ServiceId))]
-        public virtual GroupMaster ServiceMaster { get; set; }
+        //public int ServiceId { get; set; }
+        //[ForeignKey(nameof(ServiceId))]
+        //public virtual ServiceMaster ServiceMaster { get; set; }
 
         public bool IsInternal { get; set; } = true;
 
@@ -24,6 +24,10 @@ namespace Grievance_DAL.DbModels
         public string? UnitId { get; set; }
         public string? UnitName { get; set; }
         public string? Department { get; set; }
+
+        public int GroupId { get; set; }
+        [ForeignKey(nameof(GroupId))]
+        public virtual GroupMaster GroupMaster { get; set; }
 
         public int Round { get; set; } = (int)GrievanceRound.First; 
 

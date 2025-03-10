@@ -4,6 +4,7 @@ using Grievance_Model.DTOs.Department;
 using Grievance_Model.DTOs.Group;
 using Grievance_Model.DTOs.Roles;
 using Grievance_Model.DTOs.Service;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Grievance_API.Controllers
@@ -48,11 +49,6 @@ namespace Grievance_API.Controllers
         {
             return await userRepository.GetGroupMasterListAsync();
         }
-        [HttpPost("AddUpdateGroupMaster")]
-        public async Task<ResponseModel> AddUpdateGroupMaster([FromBody] GroupMasterModel groupMaster)
-        {
-            return await userRepository.AddUpdateGroupMasterAsync(groupMaster);
-        }
         [HttpGet("ActiveInactiveGroup")]
         public async Task<ResponseModel> ActiveInactiveGroup(int groupId, bool isActive)
         {
@@ -78,31 +74,20 @@ namespace Grievance_API.Controllers
         {
             return await userRepository.GetDepartmentMappingListAsync();
         }
-        [HttpGet("GetServiceMasterList")]
-        public async Task<ResponseModel> GetServiceMasterList()
-        {
-            return await userRepository.GetServiceMasterListAsync();
-        }
-        [HttpPost("AddUpdateServiceMaster")]
-        public async Task<ResponseModel> AddUpdateServiceMaster([FromBody] ServiceMasterModel serviceMaster)
-        {
-            return await userRepository.AddUpdateServiceMasterAsync(serviceMaster);
-        }
-        [HttpGet("ActiveInactiveService")]
-        public async Task<ResponseModel> ActiveInactiveService(int serviceId, bool isActive)
-        {
-            return await userRepository.ActiveInactiveServiceAsync(serviceId, isActive);
-        }
-        [HttpGet("GetServiceDetail")]
-        public async Task<ResponseModel> GetServiceDetail(int serviceId)
-        {
-            return await userRepository.GetServiceDetailAsync(serviceId);
-        }
         [HttpGet("GetAddressalList")]
         public async Task<ResponseModel> GetAddressalList(string? unitId)
         {
             return await userRepository.GetAddressalListAsync(unitId);
         }
-        
+        [HttpPost("AddUpdateGroupNew")]
+        public async Task<ResponseModel> AddUpdateGroupNew(GroupMasterModel groupModel)
+        {
+            return await userRepository.AddUpdateGroupNewAsync(groupModel);
+        }
+        [HttpGet("GetOrgGroupHierarchy")]
+        public async Task<ResponseModel> GetOrgGroupHierarchy(string unitId)
+        {
+            return await userRepository.GetOrgGroupHierarchyAsync(unitId);
+        }
     }
 }

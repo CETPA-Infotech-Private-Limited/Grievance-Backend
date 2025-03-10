@@ -15,9 +15,9 @@ namespace Grievance_DAL.DbModels
         public string Title { get; set; }
         public string Description { get; set; }
 
-        public int ServiceId { get; set; }
-        [ForeignKey(nameof(ServiceId))]
-        public virtual GroupMaster ServiceMaster { get; set; }
+        //public int ServiceId { get; set; }
+        //[ForeignKey(nameof(ServiceId))]
+        //public virtual ServiceMaster ServiceMaster { get; set; }
 
         public int Round { get; set; } = (int)GrievanceRound.First; // Enum for Round
 
@@ -29,6 +29,10 @@ namespace Grievance_DAL.DbModels
         public virtual GrievanceStatus Status { get; set; }
 
         public RowStatus RowStatus { get; set; } = RowStatus.Active; // Enum for RowStatus
+
+        public string? TUnitId {  get; set; } //to log the transfer changes of a grievance
+        public int? TGroupId {  get; set; } //to log the transfer changes of a grievance
+
     }
 
 }

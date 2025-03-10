@@ -1,27 +1,16 @@
 ﻿using System.Net;
-using System.Net.Sockets;
-using System.Text.RegularExpressions;
 using System.Text;
 using Grievance_BAL.IServices;
 using Grievance_DAL.DatabaseContext;
 using Grievance_DAL.DbModels;
 using Grievance_Model.DTOs.AppResponse;
-using Grievance_Model.DTOs.Grievance;
-using Grievance_Utility;
-using Microsoft.EntityFrameworkCore.Storage;
-using Microsoft.IdentityModel.Tokens;
-using static Grievance_BAL.Services.AccountRepository;
-using System.Net.Mail;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Http;
-using Grievance_Model.DTOs.Notification;
-using System.Globalization;
-using Microsoft.VisualBasic;
-using Microsoft.Extensions.Configuration;
-using System.Linq;
-using System.ComponentModel.Design;
 using Grievance_Model.DTOs.Dashboard;
-using System.Text.Json;
+using Grievance_Model.DTOs.Grievance;
+using Grievance_Model.DTOs.Notification;
+using Grievance_Utility;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Configuration;
 
 namespace Grievance_BAL.Services
 {
@@ -111,71 +100,71 @@ namespace Grievance_BAL.Services
 
                     if (appRoles.Any(r => r == Constant.AppRoles.Committee))
                     {
-                        grievanceMasterIds.AddRange(from gm in grievanceQuery
-                                                    join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
-                                                    join sm in _dbContext.Services on gm.ServiceId equals sm.Id
-                                                    join gpMst in _dbContext.Groups on sm.GroupMasterId equals gpMst.Id
-                                                    where (gp.Id == _dbContext.GrievanceProcesses
-                                                              .Where(t => t.GrievanceMasterId == gm.Id)
-                                                              .OrderByDescending(t => t.Id)
-                                                              .Select(t => t.Id)
-                                                              .FirstOrDefault() && gp.AssignedUserCode == userCode)
-                                                           || ((gp.AssignedUserCode == userCode && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved)
-                                                           || gm.Round == (int)Grievance_Utility.GrievanceRound.Third)
-                                                           || resolvedGrievanceIds.Contains(gm.Id)
-                                                    select gm.Id);
+                        //grievanceMasterIds.AddRange(from gm in grievanceQuery
+                        //                            join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
+                        //                            //join sm in _dbContext.Services on gm.ServiceId equals sm.Id
+                        //                            join gpMst in _dbContext.Groups on sm.GroupMasterId equals gpMst.Id
+                        //                            where (gp.Id == _dbContext.GrievanceProcesses
+                        //                                      .Where(t => t.GrievanceMasterId == gm.Id)
+                        //                                      .OrderByDescending(t => t.Id)
+                        //                                      .Select(t => t.Id)
+                        //                                      .FirstOrDefault() && gp.AssignedUserCode == userCode)
+                        //                                   || ((gp.AssignedUserCode == userCode && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved)
+                        //                                   || gm.Round == (int)Grievance_Utility.GrievanceRound.Third)
+                        //                                   || resolvedGrievanceIds.Contains(gm.Id)
+                        //                            select gm.Id);
                     }
 
                     if (appRoles.Any(r => r == Constant.AppRoles.HOD))
                     {
-                        grievanceMasterIds.AddRange(from gm in grievanceQuery
-                                                    join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
-                                                    join sm in _dbContext.Services on gm.ServiceId equals sm.Id
-                                                    join gpMst in _dbContext.Groups on sm.GroupMasterId equals gpMst.Id
-                                                    where (gp.Id == _dbContext.GrievanceProcesses
-                                                              .Where(t => t.GrievanceMasterId == gm.Id)
-                                                              .OrderByDescending(t => t.Id)
-                                                              .Select(t => t.Id)
-                                                              .FirstOrDefault() && gp.AssignedUserCode == userCode)
-                                                    || (userGroups.Select(ug => ug.GroupId).Contains(gpMst.Id))
-                                                           || (userDepartments.Select(a => a.Department.Trim().ToLower()).Contains(gm.Department.Trim().ToLower())
-                                                           && (gp.AssignedUserCode == userCode && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved)
-                                                           || gm.StatusId == (int)Grievance_Utility.GrievanceStatus.Created)
-                                                           || resolvedGrievanceIds.Contains(gm.Id)
-                                                    select gm.Id);
+                        //grievanceMasterIds.AddRange(from gm in grievanceQuery
+                        //                            join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
+                        //                            //join sm in _dbContext.Services on gm.ServiceId equals sm.Id
+                        //                            join gpMst in _dbContext.Groups on sm.GroupMasterId equals gpMst.Id
+                        //                            where (gp.Id == _dbContext.GrievanceProcesses
+                        //                                      .Where(t => t.GrievanceMasterId == gm.Id)
+                        //                                      .OrderByDescending(t => t.Id)
+                        //                                      .Select(t => t.Id)
+                        //                                      .FirstOrDefault() && gp.AssignedUserCode == userCode)
+                        //                            || (userGroups.Select(ug => ug.GroupId).Contains(gpMst.Id))
+                        //                                   || (userDepartments.Select(a => a.Department.Trim().ToLower()).Contains(gm.Department.Trim().ToLower())
+                        //                                   && (gp.AssignedUserCode == userCode && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved)
+                        //                                   || gm.StatusId == (int)Grievance_Utility.GrievanceStatus.Created)
+                        //                                   || resolvedGrievanceIds.Contains(gm.Id)
+                        //                            select gm.Id);
                     }
 
                     if (appRoles.Any(r => r == Constant.AppRoles.Addressal))
                     {
-                        grievanceMasterIds.AddRange(from gm in grievanceQuery
-                                                    join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
-                                                    join sm in _dbContext.Services on gm.ServiceId equals sm.Id
-                                                    join gpMst in _dbContext.Groups on sm.GroupMasterId equals gpMst.Id
-                                                    where (gp.Id == _dbContext.GrievanceProcesses
-                                                              .Where(t => t.GrievanceMasterId == gm.Id)
-                                                              .OrderByDescending(t => t.Id)
-                                                              .Select(t => t.Id)
-                                                              .FirstOrDefault() && gp.AssignedUserCode == userCode)
-                                                    || (userGroups.Select(ug => ug.GroupId).Contains(gpMst.Id))
-                                                           && (userDepartments.Select(a => a.Department.Trim().ToLower()).Contains(gm.Department.Trim().ToLower())
-                                                           && (gp.AssignedUserCode == userCode && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved)
-                                                           || gm.StatusId == (int)Grievance_Utility.GrievanceStatus.Created)
-                                                           || resolvedGrievanceIds.Contains(gm.Id)
-                                                    select gm.Id);
+                        //grievanceMasterIds.AddRange(from gm in grievanceQuery
+                        //                            join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
+                        //                            //join sm in _dbContext.Services on gm.ServiceId equals sm.Id
+                        //                            join gpMst in _dbContext.Groups on sm.GroupMasterId equals gpMst.Id
+                        //                            where (gp.Id == _dbContext.GrievanceProcesses
+                        //                                      .Where(t => t.GrievanceMasterId == gm.Id)
+                        //                                      .OrderByDescending(t => t.Id)
+                        //                                      .Select(t => t.Id)
+                        //                                      .FirstOrDefault() && gp.AssignedUserCode == userCode)
+                        //                            || (userGroups.Select(ug => ug.GroupId).Contains(gpMst.Id))
+                        //                                   && (userDepartments.Select(a => a.Department.Trim().ToLower()).Contains(gm.Department.Trim().ToLower())
+                        //                                   && (gp.AssignedUserCode == userCode && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved)
+                        //                                   || gm.StatusId == (int)Grievance_Utility.GrievanceStatus.Created)
+                        //                                   || resolvedGrievanceIds.Contains(gm.Id)
+                        //                            select gm.Id);
 
                     }
                 }
                 else
                 {
-                    grievanceMasterIds.AddRange(from gm in grievanceQuery
-                                                join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
-                                                join sm in _dbContext.Services on gm.ServiceId equals sm.Id
-                                                join gpMst in _dbContext.Groups on sm.GroupMasterId equals gpMst.Id
-                                                where userGroups.Select(ug => ug.GroupId).Contains(gpMst.Id)
-                                                && ((gp.AssignedUserCode == userCode && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved)
-                                                       || gm.StatusId == (int)Grievance_Utility.GrievanceStatus.Created)
-                                                       || resolvedGrievanceIds.Contains(gm.Id)
-                                                select gm.Id);
+                    //grievanceMasterIds.AddRange(from gm in grievanceQuery
+                    //                            join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
+                    //                            join sm in _dbContext.Services on gm.ServiceId equals sm.Id
+                    //                            join gpMst in _dbContext.Groups on sm.GroupMasterId equals gpMst.Id
+                    //                            where userGroups.Select(ug => ug.GroupId).Contains(gpMst.Id)
+                    //                            && ((gp.AssignedUserCode == userCode && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Resolved)
+                    //                                   || gm.StatusId == (int)Grievance_Utility.GrievanceStatus.Created)
+                    //                                   || resolvedGrievanceIds.Contains(gm.Id)
+                    //                            select gm.Id);
                 }
                 grievanceMasterIds = grievanceMasterIds.Distinct().ToList();
                 query = query.Where(g => grievanceMasterIds.Contains(g.Id) && g.CreatedBy != Convert.ToInt32(userCode));
@@ -201,7 +190,7 @@ namespace Grievance_BAL.Services
                                         Id = gm.Id,
                                         Title = gm.Title,
                                         Description = gm.Description,
-                                        ServiceId = gm.ServiceId,
+                                        //ServiceId = gm.ServiceId,
                                         IsInternal = gm.IsInternal,
                                         UserCode = gm.UserCode,
                                         UserEmail = gm.UserEmail,
@@ -268,7 +257,7 @@ namespace Grievance_BAL.Services
                                         Id = gm.Id,
                                         Title = gm.Title,
                                         Description = gm.Description,
-                                        ServiceId = gm.ServiceId,
+                                        //ServiceId = gm.ServiceId,
                                         IsInternal = gm.IsInternal,
                                         UserCode = gm.UserCode,
                                         UserEmail = gm.UserEmail,
@@ -318,7 +307,7 @@ namespace Grievance_BAL.Services
                 {
                     Title = grievanceModel.Title,
                     Description = grievanceModel.Description,
-                    ServiceId = grievanceModel.ServiceId,
+                    //ServiceId = grievanceModel.ServiceId,
                     IsInternal = grievanceModel.IsInternal,
                     UserCode = grievanceModel.IsInternal ? grievanceModel.UserCode : string.Empty,
                     UserEmail = grievanceModel.IsInternal ? userDetails.empEmail : grievanceModel.UserEmail,
@@ -338,7 +327,7 @@ namespace Grievance_BAL.Services
             }
             else
             {
-                grievanceMaster.ServiceId = grievanceModel.ServiceId;
+                //grievanceMaster.ServiceId = grievanceModel.ServiceId;
                 grievanceMaster.StatusId = grievanceModel.StatusId ?? grievanceMaster.StatusId;
 
                 grievanceMaster.ModifyBy = Convert.ToInt32(grievanceModel.UserCode);
@@ -355,23 +344,23 @@ namespace Grievance_BAL.Services
                 if (string.IsNullOrEmpty(grievanceModel.AssignedUserCode))
                 {
                     var FinalCommiteeUnit = _configuration["FinalCommiteeUnit"].ToString();
-                    var addressal = (from sm in _dbContext.Services
-                                     join ug in _dbContext.UserGroupMappings on sm.GroupMasterId equals ug.GroupId
-                                     join ud in _dbContext.UserDepartmentMappings on ug.UserCode equals ud.UserCode
-                                     where (userDetails.unitId.ToString() != FinalCommiteeUnit
-                                     || ud.Department.Trim().ToLower() == userDetails.department.Trim().ToLower())
-                                     && ug.GroupId == sm.GroupMasterId && ug.UnitId == userDetails.unitId.ToString()
-                                     && sm.Id == grievanceMaster.ServiceId
-                                     select new
-                                     {
-                                         UserCode = ug.UserCode,
-                                         UserDetails = ug.UserDetails
-                                     }).FirstOrDefault();
-                    if (addressal != null)
-                    {
-                        addressalCode = addressal.UserCode;
-                        addressalDetail = addressal.UserDetails;
-                    }
+                    //var addressal = (from sm in _dbContext.Services
+                    //                 join ug in _dbContext.UserGroupMappings on sm.GroupMasterId equals ug.GroupId
+                    //                 join ud in _dbContext.UserDepartmentMappings on ug.UserCode equals ud.UserCode
+                    //                 where (userDetails.unitId.ToString() != FinalCommiteeUnit
+                    //                 || ud.Department.Trim().ToLower() == userDetails.department.Trim().ToLower())
+                    //                 && ug.GroupId == sm.GroupMasterId && ug.UnitId == userDetails.unitId.ToString()
+                    //                 && sm.Id == grievanceMaster.ServiceId
+                    //                 select new
+                    //                 {
+                    //                     UserCode = ug.UserCode,
+                    //                     UserDetails = ug.UserDetails
+                    //                 }).FirstOrDefault();
+                    //if (addressal != null)
+                    //{
+                    //    addressalCode = addressal.UserCode;
+                    //    addressalDetail = addressal.UserDetails;
+                    //}
                 }
                 else
                 {
@@ -393,7 +382,7 @@ namespace Grievance_BAL.Services
 
                     Title = grievanceModel.Title,
                     Description = grievanceModel.Description,
-                    ServiceId = grievanceModel.ServiceId,
+                    //ServiceId = grievanceModel.ServiceId,
                     Round = grievanceModel.Round ?? grievanceMaster.Round,
                     StatusId = grievanceMaster == null ? (int)Grievance_Utility.GrievanceStatus.Created : grievanceModel.StatusId ?? grievanceMaster.StatusId,
                     RowStatus = Grievance_Utility.RowStatus.Active,
@@ -552,7 +541,7 @@ namespace Grievance_BAL.Services
                         GrievanceMasterId = grievanceMasterId,
                         Title = grievanceMaster.Title,
                         Description = grievanceMaster.Description,
-                        ServiceId = grievanceMaster.ServiceId,
+                        //ServiceId = grievanceMaster.ServiceId,
                         Round = (int)Grievance_Utility.GrievanceRound.Second,
                         StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress,
                         RowStatus = Grievance_Utility.RowStatus.Active,
@@ -659,7 +648,7 @@ namespace Grievance_BAL.Services
                         GrievanceMasterId = grievanceMasterId,
                         Title = grievanceMaster.Title,
                         Description = grievanceMaster.Description,
-                        ServiceId = grievanceMaster.ServiceId,
+                        //ServiceId = grievanceMaster.ServiceId,
                         Round = (int)Grievance_Utility.GrievanceRound.Third,
                         StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress,
                         RowStatus = Grievance_Utility.RowStatus.Active,
@@ -917,7 +906,7 @@ namespace Grievance_BAL.Services
                             Attachments = grievanceAttachments,
                             UserCode = grievanceDetail.UserCode,
                             UserDetails = grievanceDetail.UserDetails,
-                            ServiceId = gp.ServiceId,
+                            //ServiceId = gp.ServiceId,
                             Round = gp.Round,
                             AssignedUserCode = gp.AssignedUserCode,
                             AssignedUserDetails = gp.AssignedUserDetails,
@@ -1375,7 +1364,6 @@ namespace Grievance_BAL.Services
 
             return responseModel;
         }
-
 
     }
 }

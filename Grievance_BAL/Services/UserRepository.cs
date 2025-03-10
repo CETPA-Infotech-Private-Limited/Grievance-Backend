@@ -1,18 +1,12 @@
-﻿using System.ComponentModel.Design.Serialization;
-using System.Data;
-using System.Drawing.Printing;
+﻿using System.Data;
 using System.Net;
-using System.Text.RegularExpressions;
 using Grievance_BAL.IServices;
 using Grievance_DAL.DatabaseContext;
 using Grievance_DAL.DbModels;
 using Grievance_Model.DTOs.AppResponse;
-using Grievance_Model.DTOs.Dashboard;
 using Grievance_Model.DTOs.Department;
-using Grievance_Model.DTOs.Employee;
 using Grievance_Model.DTOs.Group;
 using Grievance_Model.DTOs.Roles;
-using Grievance_Model.DTOs.Service;
 using Grievance_Utility;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -321,63 +315,6 @@ namespace Grievance_BAL.Services
             return responseModel;
         }
 
-        public async Task<ResponseModel> AddUpdateGroupMasterAsync(GroupMasterModel groupMaster)
-        {
-            ResponseModel responseModel = new ResponseModel()
-            {
-                StatusCode = System.Net.HttpStatusCode.BadRequest,
-                Message = "Bad Request"
-            };
-            if (groupMaster != null)
-            {
-                var existingGroup = _dbContext.Groups.Where(group => group.Id == groupMaster.Id /*|| (group.GroupName.ToLower().Trim() == groupMaster.GroupName.ToLower().Trim() && group.IsHOD == groupMaster.IsHOD && group.IsCommitee == groupMaster.IsCommitee)*/).FirstOrDefault();
-                if (existingGroup == null)
-                {
-                    var newGroup = new GroupMaster()
-                    {
-                        GroupName = groupMaster.GroupName,
-                        Description = groupMaster.Description ?? string.Empty,
-                        IsCommitee = groupMaster.IsCommitee,
-                        IsHOD = groupMaster.IsHOD,
-                        HODofGroupId = groupMaster.HODofGroupId,
-                        CreatedBy = Convert.ToInt32(groupMaster.UserCode),
-                        CreatedDate = DateTime.Now,
-                        IsActive = true,
-                    };
-                    _dbContext.Groups.Add(newGroup);
-                    await _dbContext.SaveChangesAsync();
-
-                    responseModel.StatusCode = HttpStatusCode.OK;
-                    responseModel.Message = "Group Master Added Sucessfully.";
-                    responseModel.Data = new { groupId = newGroup.Id };
-                }
-                else
-                {
-                    existingGroup.GroupName = groupMaster.GroupName;
-                    existingGroup.Description = groupMaster.Description ?? string.Empty;
-                    existingGroup.IsCommitee = groupMaster.IsCommitee;
-                    existingGroup.IsHOD = groupMaster.IsHOD;
-                    existingGroup.HODofGroupId = groupMaster.HODofGroupId;
-                    existingGroup.ModifyBy = Convert.ToInt32(groupMaster.UserCode);
-                    existingGroup.ModifyDate = DateTime.Now;
-                    existingGroup.IsActive = true;
-
-                    _dbContext.Groups.Update(existingGroup);
-                    await _dbContext.SaveChangesAsync();
-
-                    responseModel.StatusCode = HttpStatusCode.OK;
-                    responseModel.Message = "Group Master Updated Sucessfully";
-                    responseModel.Data = new { groupId = existingGroup.Id };
-                }
-            }
-            else
-            {
-                responseModel.StatusCode = HttpStatusCode.BadRequest;
-                responseModel.Message = "Group Master Not Valid";
-            }
-            return responseModel;
-        }
-
         public async Task<ResponseModel> ActiveInactiveGroupAsync(int groupId, bool isActive)
         {
             ResponseModel responseModel = new ResponseModel()
@@ -434,83 +371,6 @@ namespace Grievance_BAL.Services
 
             return responseModel;
         }
-
-        //public async Task<ResponseModel> UpdateUserGroupMappingAsync(UserGroupMasterMappingModel mappings)
-        //{
-        //    ResponseModel responseModel = new ResponseModel()
-        //    {
-        //        StatusCode = HttpStatusCode.BadRequest,
-        //        Message = "Bad Request"
-        //    };
-
-        //    var multipleUnit = mappings.UnitId.Contains(",") ? mappings.UnitId.Split(",").ToList() : new List<string> { mappings.UnitId };
-        //    var multipleUnitName = mappings.UnitName.Contains(",") ? mappings.UnitName.Split(",").ToList() : new List<string> { mappings.UnitName };
-
-        //    var removeMapping = _dbContext.UserGroupMappings
-        //        .Where(a => a.GroupId == mappings.GroupMasterId &&
-        //                    multipleUnit.Contains(a.UnitId) &&
-        //                    (mappings.UserCodes == null || !mappings.UserCodes.Select(e => e.UserCode).Contains(a.UserCode)))
-        //        .ToList();
-
-        //    List<UserGroupMapping> newMapping = new();
-
-        //    if (mappings.UserCodes != null && mappings.UserCodes.Count > 0)
-        //    {
-        //        var excludeMapping = _dbContext.UserGroupMappings
-        //            .Where(a => a.GroupId == mappings.GroupMasterId &&
-        //                        multipleUnit.Contains(a.UnitId) &&
-        //                        mappings.UserCodes.Select(e => e.UserCode).Contains(a.UserCode))
-        //            .Select(a => new { a.UserCode, a.UnitId })
-        //            .ToList();
-
-        //        foreach (var emp in mappings.UserCodes)
-        //        {
-        //            for (int i = 0; i < multipleUnit.Count; i++)
-        //            {
-        //                var unitId = multipleUnit[i];
-        //                var unitName = multipleUnitName[i];
-
-        //                if (!excludeMapping.Any(b => b.UserCode == emp.UserCode && b.UnitId == unitId))
-        //                {
-        //                    newMapping.Add(new UserGroupMapping
-        //                    {
-        //                        GroupId = mappings.GroupMasterId,
-        //                        UnitId = unitId,
-        //                        UnitName = unitName,
-        //                        UserCode = emp.UserCode,
-        //                        UserDetails = emp.UserDetails
-        //                    });
-        //                }
-        //            }
-        //        }
-        //    }
-
-        //    if (removeMapping.Any())
-        //    {
-        //        _dbContext.UserGroupMappings.RemoveRange(removeMapping);
-        //    }
-
-        //    if (newMapping.Any())
-        //    {
-        //        await _dbContext.UserGroupMappings.AddRangeAsync(newMapping);
-        //    }
-
-        //    var resultCount = await _dbContext.SaveChangesAsync();
-        //    if (resultCount > 0)
-        //    {
-        //        responseModel.StatusCode = HttpStatusCode.OK;
-        //        responseModel.Message = "User GroupMaster Mapping Updated";
-        //        responseModel.Data = mappings;
-        //        responseModel.DataLength = mappings.UserCodes.Count;
-        //    }
-        //    else
-        //    {
-        //        responseModel.StatusCode = HttpStatusCode.NotModified;
-        //        responseModel.Message = "User GroupMaster Mapping Not Updated";
-        //    }
-
-        //    return responseModel;
-        //}
 
         public async Task<ResponseModel> UpdateUserGroupMappingAsync(UserGroupMasterMappingModel mappings)
         {
@@ -716,143 +576,6 @@ namespace Grievance_BAL.Services
             return responseModel;
         }
 
-        public async Task<ResponseModel> GetServiceMasterListAsync()
-        {
-            ResponseModel responseModel = new ResponseModel()
-            {
-                StatusCode = System.Net.HttpStatusCode.BadRequest,
-                Message = "Bad Request"
-            };
-
-            var serviceMasters = await _dbContext.Services.Include(a => a.GroupMaster).ToListAsync();
-            if (serviceMasters != null && serviceMasters.Count > 0)
-            {
-                responseModel.StatusCode = HttpStatusCode.OK;
-                responseModel.Message = "All Service Details";
-                responseModel.Data = serviceMasters;
-                responseModel.DataLength = serviceMasters.Count;
-            }
-            else
-            {
-                responseModel.StatusCode = System.Net.HttpStatusCode.NotFound;
-                responseModel.Message = "Record Not found.";
-            }
-            return responseModel;
-        }
-
-        public async Task<ResponseModel> AddUpdateServiceMasterAsync(ServiceMasterModel serviceMaster)
-        {
-            ResponseModel responseModel = new ResponseModel()
-            {
-                StatusCode = System.Net.HttpStatusCode.BadRequest,
-                Message = "Bad Request"
-            };
-            if (serviceMaster != null)
-            {
-                var hasParentGroup = _dbContext.Services.Where(service => service.Id == serviceMaster.ParentServiceId).Any();
-                if ((serviceMaster.ParentServiceId != 0 && !hasParentGroup) || (serviceMaster.Id != 0 && serviceMaster.Id == serviceMaster.ParentServiceId))
-                {
-                    responseModel.StatusCode = HttpStatusCode.BadRequest;
-                    responseModel.Message = "Parent Service Invalid.";
-                    return responseModel;
-                }
-
-                var existingService = _dbContext.Services.Where(service => service.Id == serviceMaster.Id || service.ServiceName.ToLower().Trim() == serviceMaster.ServiceName.ToLower().Trim()).IgnoreAutoIncludes().FirstOrDefault();
-                if (existingService == null)
-                {
-                    var newService = new ServiceMaster()
-                    {
-                        ServiceName = serviceMaster.ServiceName,
-                        ServiceDescription = serviceMaster.ServiceDescription ?? string.Empty,
-                        ParentServiceId = serviceMaster.ParentServiceId == 0 ? null : serviceMaster.ParentServiceId,
-                        GroupMasterId = serviceMaster.GroupMasterId,
-                        CreatedBy = Convert.ToInt32(serviceMaster.UserCode),
-                        CreatedDate = DateTime.Now,
-                        IsActive = true,
-                    };
-                    _dbContext.Services.Add(newService);
-                    await _dbContext.SaveChangesAsync();
-
-                    responseModel.StatusCode = HttpStatusCode.OK;
-                    responseModel.Message = "Service Master Added Sucessfully.";
-                    responseModel.Data = new { groupId = newService.Id };
-                }
-                else
-                {
-                    existingService.ServiceName = serviceMaster.ServiceName;
-                    existingService.ServiceDescription = serviceMaster.ServiceDescription ?? string.Empty;
-                    existingService.ParentServiceId = serviceMaster.ParentServiceId == 0 ? null : serviceMaster.ParentServiceId;
-                    existingService.GroupMasterId = serviceMaster.GroupMasterId;
-                    existingService.ModifyBy = Convert.ToInt32(serviceMaster.UserCode);
-                    existingService.ModifyDate = DateTime.Now;
-                    existingService.IsActive = true;
-
-                    _dbContext.Services.Update(existingService);
-                    await _dbContext.SaveChangesAsync();
-
-                    responseModel.StatusCode = HttpStatusCode.OK;
-                    responseModel.Message = "Service Master Updated Sucessfully";
-                    responseModel.Data = new { serviceId = existingService.Id };
-                }
-            }
-            else
-            {
-                responseModel.StatusCode = HttpStatusCode.BadRequest;
-                responseModel.Message = "Service Master Not Valid";
-            }
-            return responseModel;
-        }
-
-        public async Task<ResponseModel> ActiveInactiveServiceAsync(int serviceId, bool isActive)
-        {
-            ResponseModel responseModel = new ResponseModel()
-            {
-                StatusCode = System.Net.HttpStatusCode.BadRequest,
-                Message = "Bad Request"
-            };
-
-            var existingService = _dbContext.Services.Where(service => service.Id == serviceId).FirstOrDefault();
-            if (existingService != null)
-            {
-                existingService.IsActive = isActive;
-                _dbContext.Update(existingService);
-                await _dbContext.SaveChangesAsync();
-
-                responseModel.StatusCode = HttpStatusCode.OK;
-                responseModel.Message = string.Format("Service Master {0} Sucessfully.", isActive ? "Activated" : "Deactivated");
-                responseModel.Data = new { serviceId = existingService.Id };
-            }
-            else
-            {
-                responseModel.StatusCode = HttpStatusCode.NotFound;
-                responseModel.Message = "Service Master Not Found";
-            }
-            return responseModel;
-        }
-
-        public async Task<ResponseModel> GetServiceDetailAsync(int serviceId)
-        {
-            ResponseModel responseModel = new ResponseModel()
-            {
-                StatusCode = System.Net.HttpStatusCode.BadRequest,
-                Message = "Bad Request"
-            };
-
-            var service = await _dbContext.Services.Where(a => a.Id == serviceId).FirstOrDefaultAsync();
-            if (service != null)
-            {
-                responseModel.StatusCode = HttpStatusCode.OK;
-                responseModel.Message = "Service Master Details.";
-                responseModel.Data = service;
-            }
-            else
-            {
-                responseModel.StatusCode = HttpStatusCode.NotFound;
-                responseModel.Message = "Service Master Not Found";
-            }
-            return responseModel;
-        }
-
         public async Task<ResponseModel> GetAddressalListAsync(string? unitId)
         {
             ResponseModel responseModel = new ResponseModel
@@ -861,7 +584,7 @@ namespace Grievance_BAL.Services
                 Message = "Bad Request"
             };
 
-            var addressalUsers = (await _dbContext.UserGroupMappings.Where(a => (string.IsNullOrEmpty(unitId) || a.UnitId == unitId)).Include(a=>a.Group).ToListAsync()).Distinct().GroupBy(a => a.UnitId).Select(add => new
+            var addressalUsers = (await _dbContext.UserGroupMappings.Where(a => (string.IsNullOrEmpty(unitId) || a.UnitId == unitId)).Include(a => a.Group).ToListAsync()).Distinct().GroupBy(a => a.UnitId).Select(add => new
             {
                 UnitId = add.First().UnitId,
                 UnitName = add.First().UnitName,
@@ -891,5 +614,242 @@ namespace Grievance_BAL.Services
             return responseModel;
         }
 
+        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        public async Task<ResponseModel> AddUpdateGroupNewAsync(GroupMasterModel groupModel)
+        {
+            ResponseModel responseModel = new ResponseModel()
+            {
+                StatusCode = System.Net.HttpStatusCode.BadRequest,
+                Message = "Bad Request"
+            };
+            if (groupModel != null)
+            {
+                var existingGroup = _dbContext.Groups.Where(group => group.Id == groupModel.Id).FirstOrDefault();
+                if (existingGroup == null)
+                {
+                    var newGroup = new GroupMaster()
+                    {
+                        GroupName = groupModel.GroupName,
+                        Description = groupModel.Description ?? string.Empty,
+                        IsCommitee = groupModel.IsCommitee ?? false,
+                        IsHOD = groupModel.IsHOD ?? false,
+                        IsServiceCategory = groupModel.IsServiceCategory ?? false,
+                        ParentGroupId = groupModel.ParentGroupId == null || groupModel.ParentGroupId == 0 ? null : groupModel.ParentGroupId,
+                        UnitId = groupModel.UnitId,
+                        CreatedBy = Convert.ToInt32(groupModel.CreatedBy),
+                        CreatedDate = DateTime.Now,
+                        IsActive = true,
+                    };
+                    _dbContext.Groups.Add(newGroup);
+                    await _dbContext.SaveChangesAsync();
+
+                    var parentGroupId = newGroup.Id;
+                    if (groupModel.MappedUser != null)
+                    {
+                        var mappingData = new UserGroupMasterMappingModel
+                        {
+                            GroupMasterId = parentGroupId,
+                            UnitId = groupModel.UnitId,
+                            UnitName = groupModel.UnitName,
+                            UserCodes = groupModel.MappedUser.Select(user => new GroupUser
+                            {
+                                UserCode = user.UserCode,
+                                UserDetails = user.UserDetail
+                            }).ToList()
+                        };
+                        await UpdateUserGroupMappingAsync(mappingData);
+                    }
+                    var childGroup = groupModel.ChildGroup;
+
+                    while (childGroup != null && !string.IsNullOrEmpty(childGroup.GroupName))
+                    {
+                        var newChildGroup = new GroupMaster()
+                        {
+                            GroupName = childGroup.GroupName,
+                            Description = childGroup.Description ?? string.Empty,
+                            IsCommitee = childGroup.IsCommitee ?? false,
+                            IsHOD = childGroup.IsHOD ?? false,
+                            IsServiceCategory = childGroup.IsServiceCategory ?? false,
+                            ParentGroupId = parentGroupId,
+                            UnitId = childGroup.UnitId,
+                            CreatedBy = Convert.ToInt32(childGroup.CreatedBy),
+                            CreatedDate = DateTime.Now,
+                            IsActive = true,
+                        };
+                        _dbContext.Groups.Add(newChildGroup);
+                        await _dbContext.SaveChangesAsync();
+
+                        parentGroupId = newChildGroup.Id;
+                        if (childGroup.MappedUser != null)
+                        {
+                            var mappingData = new UserGroupMasterMappingModel
+                            {
+                                GroupMasterId = parentGroupId,
+                                UnitId = groupModel.UnitId,
+                                UnitName = groupModel.UnitName,
+                                UserCodes = childGroup.MappedUser.Select(user => new GroupUser
+                                {
+                                    UserCode = user.UserCode,
+                                    UserDetails = user.UserDetail
+                                }).ToList()
+                            };
+                            await UpdateUserGroupMappingAsync(mappingData);
+                        }
+                        childGroup = childGroup.ChildGroup;
+                    }
+
+                    responseModel.StatusCode = HttpStatusCode.OK;
+                    responseModel.Message = "Group Master Added Sucessfully.";
+                    responseModel.Data = new { groupId = newGroup.Id };
+                }
+                else
+                {
+                    existingGroup.GroupName = groupModel.GroupName;
+                    existingGroup.Description = groupModel.Description ?? string.Empty;
+                    existingGroup.IsCommitee = groupModel.IsCommitee ?? false;
+                    existingGroup.IsHOD = groupModel.IsHOD ?? false;
+                    existingGroup.IsServiceCategory = groupModel.IsServiceCategory ?? false;
+                    existingGroup.ParentGroupId = groupModel.ParentGroupId == null || groupModel.ParentGroupId == 0 ? null : groupModel.ParentGroupId;
+                    existingGroup.UnitId = groupModel.UnitId;
+                    existingGroup.ModifyBy = Convert.ToInt32(groupModel.CreatedBy);
+                    existingGroup.ModifyDate = DateTime.Now;
+                    existingGroup.IsActive = true;
+
+                    _dbContext.Groups.Update(existingGroup);
+                    await _dbContext.SaveChangesAsync();
+
+                    var parentGroupId = existingGroup.Id;
+                    if (groupModel.MappedUser != null)
+                    {
+                        var mappingData = new UserGroupMasterMappingModel
+                        {
+                            GroupMasterId = parentGroupId,
+                            UnitId = groupModel.UnitId,
+                            UnitName = groupModel.UnitName,
+                            UserCodes = groupModel.MappedUser.Select(user => new GroupUser
+                            {
+                                UserCode = user.UserCode,
+                                UserDetails = user.UserDetail
+                            }).ToList()
+                        };
+                        await UpdateUserGroupMappingAsync(mappingData);
+                    }
+                    var childGroup = groupModel.ChildGroup;
+
+                    while (childGroup != null && !string.IsNullOrEmpty(childGroup.GroupName))
+                    {
+                        var newChildGroup = new GroupMaster()
+                        {
+                            GroupName = childGroup.GroupName,
+                            Description = childGroup.Description ?? string.Empty,
+                            IsCommitee = childGroup.IsCommitee ?? false,
+                            IsHOD = childGroup.IsHOD ?? false,
+                            IsServiceCategory = childGroup.IsServiceCategory ?? false,
+                            ParentGroupId = parentGroupId,
+                            UnitId = childGroup.UnitId,
+                            CreatedBy = Convert.ToInt32(childGroup.CreatedBy),
+                            CreatedDate = DateTime.Now,
+                            IsActive = true,
+                        };
+                        _dbContext.Groups.Add(newChildGroup);
+                        await _dbContext.SaveChangesAsync();
+
+                        parentGroupId = newChildGroup.Id;
+                        if (childGroup.MappedUser != null)
+                        {
+                            var mappingData = new UserGroupMasterMappingModel
+                            {
+                                GroupMasterId = parentGroupId,
+                                UnitId = groupModel.UnitId,
+                                UnitName = groupModel.UnitName,
+                                UserCodes = childGroup.MappedUser.Select(user => new GroupUser
+                                {
+                                    UserCode = user.UserCode,
+                                    UserDetails = user.UserDetail
+                                }).ToList()
+                            };
+                            await UpdateUserGroupMappingAsync(mappingData);
+                        }
+                        childGroup = childGroup.ChildGroup;
+                    }
+
+                    responseModel.StatusCode = HttpStatusCode.OK;
+                    responseModel.Message = "Group Master Updated Sucessfully";
+                    responseModel.Data = new { groupId = existingGroup.Id };
+                }
+            }
+            else
+            {
+                responseModel.StatusCode = HttpStatusCode.BadRequest;
+                responseModel.Message = "Group Master Not Valid";
+            }
+            return responseModel;
+        }
+
+        public async Task<ResponseModel> GetOrgGroupHierarchyAsync(string unitId)
+        {
+            ResponseModel responseModel = new ResponseModel
+            {
+                StatusCode = HttpStatusCode.BadRequest,
+                Message = "Bad Request"
+            };
+            var corporateUnitId = _configuration["FinalCommiteeUnit"].ToString();
+
+            var rootGroup = await _dbContext.Groups
+                .Where(g => g.ParentGroupId == null && ((corporateUnitId == unitId) ? g.UnitId == corporateUnitId : g.UnitId != corporateUnitId))
+                .Select(g => new { g.Id })
+                .FirstOrDefaultAsync();
+
+            if (rootGroup != null)
+            {
+                var groupHierarchy = await GetGroupHierarchyAsync(rootGroup.Id);
+
+                responseModel.StatusCode = HttpStatusCode.OK;
+                responseModel.Message = "Hierarchy retrieved successfully.";
+                responseModel.Data = groupHierarchy;
+                responseModel.DataLength = 1;
+            }
+
+            return responseModel;
+        }
+
+        private async Task<GroupHierarchyResponse> GetGroupHierarchyAsync(int groupId)
+        {
+            var group = await _dbContext.Groups
+                .Where(g => g.Id == groupId)
+                .Select(g => new GroupHierarchyResponse
+                {
+                    Id = g.Id,
+                    GroupName = g.GroupName,
+                    Description = g.Description,
+                    IsCommitee = g.IsCommitee,
+                    IsHOD = g.IsHOD,
+                    IsServiceCategory = g.IsServiceCategory,
+                    UnitId = g.UnitId
+                })
+                .FirstOrDefaultAsync();
+
+            if (group != null)
+            {
+                group.MappedUser = await _dbContext.UserGroupMappings.Where(a => a.GroupId == group.Id && a.UnitId == group.UnitId).Select(m => new GroupMasterUser
+                {
+                    UserCode = m.UserCode,
+                    UserDetail = m.UserDetails,
+                    Departments = _dbContext.UserDepartmentMappings.Where(a => a.UnitId == group.UnitId && a.UserCode == m.UserCode).Select(a => a.Department).ToList(),
+                }).ToListAsync();
+
+                var childGroups = await _dbContext.Groups.Where(g => g.ParentGroupId == groupId).ToListAsync();
+                group.ChildGroups = new List<GroupHierarchyResponse>();
+                foreach (var child in childGroups)
+                {
+                    var childHierarchy = await GetGroupHierarchyAsync(child.Id);
+                    group.ChildGroups.Add(childHierarchy);
+                }
+
+            }
+
+            return group;
+        }
     }
 }
