@@ -4,6 +4,7 @@ using Grievance_DAL.DatabaseContext;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Grievance_DAL.Migrations
 {
     [DbContext(typeof(GrievanceDbContext))]
-    partial class GrievanceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250312133655_ModifiedGrievanceP3")]
+    partial class ModifiedGrievanceP3
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -3,7 +3,7 @@
     public class GrievanceProcessChanges
     {
         public int GrievanceProcessId { get; set; }
-        //public List<GrievanceChange>? ChangeList { get; set; }
+        public List<GrievanceChange>? ChangeList { get; set; }
 
         public List<CommentDetailsModel>? CommentDetails { get; set; }
         public string? CaseName { get; set; }
@@ -24,11 +24,11 @@
 
     }
 
-    //public class GrievanceChange
-    //{
-    //    public string? Column { get; set; }
-    //    public object? OldValue { get; set; }
-    //    public object? NewValue { get; set; }
-    //    public string? ProcessCount { get; set; }
-    //}
+    public class GrievanceChange
+    {
+        public string? Column { get; set; }
+        public object? OldValue { get; set; }
+        public object? NewValue { get; set; }
+        public string? ProcessCount { get; set; }
+    }
 }

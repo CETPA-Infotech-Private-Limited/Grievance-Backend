@@ -10,8 +10,8 @@ namespace Grievance_DAL.DbModels
         public string GroupName { get; set; }
         public string Description { get; set; }
 
-        public bool IsCommitee { get; set; } = false; // to link the committee
-        public bool IsHOD { get; set; } = false; // to link the HOD of service
+        public bool IsRoleGroup { get; set; } = false; // to link the committee
+        public int? RoleId { get; set; }
         public bool IsServiceCategory { get; set; } = false; // to start the categorization of service
 
         public int? ParentGroupId { get; set; }
@@ -19,9 +19,8 @@ namespace Grievance_DAL.DbModels
         public virtual GroupMaster? ParentGroup { get; set; }
 
         public string? UnitId { get; set; } // to map the group with unit 
-        
-        
-        public virtual ICollection<GroupMaster>? ChildGroups { get; set; }
+                
+        //public virtual ICollection<GroupMaster>? ChildGroups { get; set; }
     }
 
 }

@@ -13,10 +13,19 @@
     }
     public enum GrievanceStatus
     {
-        Created = 1,
+        Open = 1,
         InProgress = 2,
-        AwatingInfo = 3,
-        Resolved = 4,
-        Closed = 5
+        Closed = 3
+    }
+
+    public enum AppRoles
+    {
+        Admin = 1,
+        ManagingDirector = 2,
+        Committee = 3,
+        NodalOfficer = 4,
+        UnitCGM = 5,
+        HOD = 6,
+        Redressal = 7
     }
 }

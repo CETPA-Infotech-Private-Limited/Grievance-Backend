@@ -32,6 +32,7 @@ namespace Grievance_DAL.DbModels
 
         public string? TUnitId {  get; set; } //to log the transfer changes of a grievance
         public int? TGroupId {  get; set; } //to log the transfer changes of a grievance
+        public string? TDepartment { get; set; }
 
     }
 

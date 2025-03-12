@@ -28,6 +28,10 @@ namespace Grievance_Model.DTOs.Grievance
 
         // baseUrl for resolution link
         public string? BaseUrl { get; set; }
+
+        public string? TUnitId { get; set; } //to log the transfer changes of a grievance
+        public int? TGroupId { get; set; } //to log the transfer changes of a grievance
+        public string? TDepartment { get; set; }
     }
 
 }

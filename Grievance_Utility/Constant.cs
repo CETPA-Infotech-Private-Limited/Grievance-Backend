@@ -6,12 +6,13 @@
         {
             public const string SuperAdmin = "SuperAdmin";
             public const string Admin = "Admin";
+            public const string ManagingDirector = "ManagingDirector";
+            public const string Committee = "Committee";
             public const string NodalOfficer = "NodalOfficer";
             public const string UnitCGM = "UnitCGM";
-            public const string Addressal = "Addressal";
-            public const string User = "User";
             public const string HOD = "HOD";
-            public const string Committee = "Committee";
+            public const string Redressal = "Redressal";
+            public const string User = "User";
         }
 
         public class CommentType

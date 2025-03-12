@@ -6,8 +6,8 @@
         public string GroupName { get; set; }
         public string? Description { get; set; }
 
-        public bool? IsCommitee { get; set; } = false; // to link the committee
-        public bool? IsHOD { get; set; } = false; // to link the HOD of service
+        public bool? IsRoleGroup { get; set; } = false; // to link the role
+        public int? RoleId { get; set; }
         public bool? IsServiceCategory { get; set; } = false; // to start the categorization of service
 
         public int? ParentGroupId { get; set; }

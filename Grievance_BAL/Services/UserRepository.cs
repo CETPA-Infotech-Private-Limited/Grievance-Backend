@@ -1,5 +1,6 @@
 ﻿using System.Data;
 using System.Net;
+using System.Reflection.Emit;
 using Grievance_BAL.IServices;
 using Grievance_DAL.DatabaseContext;
 using Grievance_DAL.DbModels;
@@ -52,7 +53,7 @@ namespace Grievance_BAL.Services
 
                     responseModel.StatusCode = HttpStatusCode.OK;
                     responseModel.Message = "Application Role Added Sucessfully.";
-                    responseModel.Data = new { roleId = appRole.Id };
+                    responseModel.Data = appRole.Id;
                 }
                 else
                 {
@@ -67,7 +68,7 @@ namespace Grievance_BAL.Services
 
                     responseModel.StatusCode = HttpStatusCode.OK;
                     responseModel.Message = "Application Role Updated Sucessfully";
-                    responseModel.Data = new { roleId = appRole.Id };
+                    responseModel.Data = appRole.Id;
                 }
             }
             else
@@ -249,33 +250,32 @@ namespace Grievance_BAL.Services
 
             if (!string.IsNullOrEmpty(empCode))
             {
-                List<string> empRoles = new()
-                {
-                    Constant.AppRoles.User
-                };
-                var isAddressal = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode && (!a.Group.IsHOD && !a.Group.IsCommitee)).Any();
-                if (isAddressal)
-                    empRoles.Add(Constant.AppRoles.Addressal);
+                var userRoles = (from g in _dbContext.Groups
+                                 join r in _dbContext.AppRoles on g.RoleId equals r.Id
+                                 join gm in _dbContext.UserGroupMappings on g.Id equals gm.GroupId
+                                 select r.RoleName
+                             ).ToHashSet();
 
-                var isHOD = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode && a.Group.IsHOD == true).Any();
-                if (isHOD)
-                    empRoles.Add(Constant.AppRoles.HOD);
+                var isAdmin = (from r in _dbContext.AppRoles
+                               join rm in _dbContext.UserRoleMappings on r.Id equals rm.RoleId
+                               where r.RoleName == Constant.AppRoles.Admin && rm.UserCode == empCode
+                               select r
+                               ).Any();
 
-                var isCommitee = _dbContext.UserGroupMappings.Where(a => a.UserCode == empCode && a.Group.IsCommitee == true).Any();
-                if (isCommitee)
-                    empRoles.Add(Constant.AppRoles.Committee);
+                if (isAdmin)
+                    userRoles.Add(Constant.AppRoles.Admin);
 
-                empRoles.AddRange((await _dbContext.UserRoleMappings.Include(a => a.Role).Where(a => a.UserCode == empCode).Select(a => a.Role.RoleName).ToListAsync()).Distinct());
-
-                var isSuperAdmin = _configuration.GetSection("SuperAdmin")?.Value?.ToString() == empCode;
+                var isSuperAdmin = _configuration["SuperAdmin"].ToString() == empCode;
                 if (isSuperAdmin)
-                    empRoles.Add(Constant.AppRoles.SuperAdmin);
+                    userRoles.Add(Constant.AppRoles.SuperAdmin);
 
-                if (empRoles != null)
+                userRoles.Add(Constant.AppRoles.User);
+
+                if (userRoles != null)
                 {
                     responseModel.StatusCode = HttpStatusCode.OK;
                     responseModel.Message = "User Role Details";
-                    responseModel.Data = empRoles;
+                    responseModel.Data = userRoles;
                 }
                 else
                 {
@@ -625,6 +625,18 @@ namespace Grievance_BAL.Services
             };
             if (groupModel != null)
             {
+                var roleId = groupModel.RoleId;
+                if (groupModel.IsRoleGroup == true && groupModel.RoleId == 0)
+                {
+                    RoleModel newRole = new RoleModel
+                    {
+                        RoleName = groupModel.GroupName,
+                        Description = groupModel.Description,
+                        UserCode = groupModel.CreatedBy ?? string.Empty,
+                    };
+                    roleId = Convert.ToInt32((await AddUpdateRoleAsync(newRole)).Data);
+                }
+
                 var existingGroup = _dbContext.Groups.Where(group => group.Id == groupModel.Id).FirstOrDefault();
                 if (existingGroup == null)
                 {
@@ -632,8 +644,8 @@ namespace Grievance_BAL.Services
                     {
                         GroupName = groupModel.GroupName,
                         Description = groupModel.Description ?? string.Empty,
-                        IsCommitee = groupModel.IsCommitee ?? false,
-                        IsHOD = groupModel.IsHOD ?? false,
+                        IsRoleGroup = groupModel.IsRoleGroup ?? false,
+                        RoleId = roleId != 0 ? roleId : null,
                         IsServiceCategory = groupModel.IsServiceCategory ?? false,
                         ParentGroupId = groupModel.ParentGroupId == null || groupModel.ParentGroupId == 0 ? null : groupModel.ParentGroupId,
                         UnitId = groupModel.UnitId,
@@ -659,17 +671,39 @@ namespace Grievance_BAL.Services
                             }).ToList()
                         };
                         await UpdateUserGroupMappingAsync(mappingData);
-                    }
-                    var childGroup = groupModel.ChildGroup;
 
+                        UserRoleMappingModel roleMappings = new UserRoleMappingModel
+                        {
+                            UnitId = groupModel.UnitId,
+                            UnitName = groupModel.UnitName,
+                            RoleId = new List<int> { Convert.ToInt32(roleId) },
+                            UserCode = string.Join(",", groupModel.MappedUser.Select(a => a.UserCode)),
+                            UserDetails = string.Join(",", groupModel.MappedUser.Select(a => a.UserDetail))
+                        };
+                        await UpdateUserRoleMappingAsync(roleMappings);
+                    }
+
+                    var childGroup = groupModel.ChildGroup;
                     while (childGroup != null && !string.IsNullOrEmpty(childGroup.GroupName))
                     {
+                        roleId = childGroup.RoleId;
+                        if (childGroup.IsRoleGroup == true && childGroup.RoleId == 0)
+                        {
+                            RoleModel newRole = new RoleModel
+                            {
+                                RoleName = childGroup.GroupName,
+                                Description = childGroup.Description,
+                                UserCode = childGroup.CreatedBy ?? string.Empty,
+                            };
+                            roleId = Convert.ToInt32((await AddUpdateRoleAsync(newRole)).Data);
+                        }
+
                         var newChildGroup = new GroupMaster()
                         {
                             GroupName = childGroup.GroupName,
                             Description = childGroup.Description ?? string.Empty,
-                            IsCommitee = childGroup.IsCommitee ?? false,
-                            IsHOD = childGroup.IsHOD ?? false,
+                            IsRoleGroup = childGroup.IsRoleGroup ?? false,
+                            RoleId = roleId != 0 ? roleId : null,
                             IsServiceCategory = childGroup.IsServiceCategory ?? false,
                             ParentGroupId = parentGroupId,
                             UnitId = childGroup.UnitId,
@@ -695,6 +729,16 @@ namespace Grievance_BAL.Services
                                 }).ToList()
                             };
                             await UpdateUserGroupMappingAsync(mappingData);
+
+                            UserRoleMappingModel roleMappings = new UserRoleMappingModel
+                            {
+                                UnitId = groupModel.UnitId,
+                                UnitName = groupModel.UnitName,
+                                RoleId = new List<int> { Convert.ToInt32(roleId) },
+                                UserCode = string.Join(",", childGroup.MappedUser.Select(a => a.UserCode)),
+                                UserDetails = string.Join(",", childGroup.MappedUser.Select(a => a.UserDetail))
+                            };
+                            await UpdateUserRoleMappingAsync(roleMappings);
                         }
                         childGroup = childGroup.ChildGroup;
                     }
@@ -707,8 +751,8 @@ namespace Grievance_BAL.Services
                 {
                     existingGroup.GroupName = groupModel.GroupName;
                     existingGroup.Description = groupModel.Description ?? string.Empty;
-                    existingGroup.IsCommitee = groupModel.IsCommitee ?? false;
-                    existingGroup.IsHOD = groupModel.IsHOD ?? false;
+                    existingGroup.IsRoleGroup = groupModel.IsRoleGroup ?? false;
+                    existingGroup.RoleId = roleId != 0 ? roleId : null;
                     existingGroup.IsServiceCategory = groupModel.IsServiceCategory ?? false;
                     existingGroup.ParentGroupId = groupModel.ParentGroupId == null || groupModel.ParentGroupId == 0 ? null : groupModel.ParentGroupId;
                     existingGroup.UnitId = groupModel.UnitId;
@@ -734,17 +778,39 @@ namespace Grievance_BAL.Services
                             }).ToList()
                         };
                         await UpdateUserGroupMappingAsync(mappingData);
-                    }
-                    var childGroup = groupModel.ChildGroup;
 
+                        UserRoleMappingModel roleMappings = new UserRoleMappingModel
+                        {
+                            UnitId = groupModel.UnitId,
+                            UnitName = groupModel.UnitName,
+                            RoleId = new List<int> { Convert.ToInt32(roleId) },
+                            UserCode = string.Join(",", groupModel.MappedUser.Select(a => a.UserCode)),
+                            UserDetails = string.Join(",", groupModel.MappedUser.Select(a => a.UserDetail))
+                        };
+                        await UpdateUserRoleMappingAsync(roleMappings);
+                    }
+
+                    var childGroup = groupModel.ChildGroup;
                     while (childGroup != null && !string.IsNullOrEmpty(childGroup.GroupName))
                     {
+                        roleId = childGroup.RoleId;
+                        if (childGroup.IsRoleGroup == true && childGroup.RoleId == 0)
+                        {
+                            RoleModel newRole = new RoleModel
+                            {
+                                RoleName = childGroup.GroupName,
+                                Description = childGroup.Description,
+                                UserCode = childGroup.CreatedBy ?? string.Empty,
+                            };
+                            roleId = Convert.ToInt32((await AddUpdateRoleAsync(newRole)).Data);
+                        }
+
                         var newChildGroup = new GroupMaster()
                         {
                             GroupName = childGroup.GroupName,
                             Description = childGroup.Description ?? string.Empty,
-                            IsCommitee = childGroup.IsCommitee ?? false,
-                            IsHOD = childGroup.IsHOD ?? false,
+                            IsRoleGroup = childGroup.IsRoleGroup ?? false,
+                            RoleId = roleId != 0 ? roleId : null,
                             IsServiceCategory = childGroup.IsServiceCategory ?? false,
                             ParentGroupId = parentGroupId,
                             UnitId = childGroup.UnitId,
@@ -770,6 +836,16 @@ namespace Grievance_BAL.Services
                                 }).ToList()
                             };
                             await UpdateUserGroupMappingAsync(mappingData);
+
+                            UserRoleMappingModel roleMappings = new UserRoleMappingModel
+                            {
+                                UnitId = groupModel.UnitId,
+                                UnitName = groupModel.UnitName,
+                                RoleId = new List<int> { Convert.ToInt32(roleId) },
+                                UserCode = string.Join(",", childGroup.MappedUser.Select(a => a.UserCode)),
+                                UserDetails = string.Join(",", childGroup.MappedUser.Select(a => a.UserDetail))
+                            };
+                            await UpdateUserRoleMappingAsync(roleMappings);
                         }
                         childGroup = childGroup.ChildGroup;
                     }
@@ -803,7 +879,7 @@ namespace Grievance_BAL.Services
 
             if (rootGroup != null)
             {
-                var groupHierarchy = await GetGroupHierarchyAsync(rootGroup.Id);
+                var groupHierarchy = await GetGroupHierarchyAsync(rootGroup.Id, unitId);
 
                 responseModel.StatusCode = HttpStatusCode.OK;
                 responseModel.Message = "Hierarchy retrieved successfully.";
@@ -814,7 +890,7 @@ namespace Grievance_BAL.Services
             return responseModel;
         }
 
-        private async Task<GroupHierarchyResponse> GetGroupHierarchyAsync(int groupId)
+        private async Task<GroupHierarchyResponse> GetGroupHierarchyAsync(int groupId, string unitId)
         {
             var group = await _dbContext.Groups
                 .Where(g => g.Id == groupId)
@@ -823,8 +899,8 @@ namespace Grievance_BAL.Services
                     Id = g.Id,
                     GroupName = g.GroupName,
                     Description = g.Description,
-                    IsCommitee = g.IsCommitee,
-                    IsHOD = g.IsHOD,
+                    IsRoleGroup = g.IsRoleGroup,
+                    RoleId = g.RoleId,
                     IsServiceCategory = g.IsServiceCategory,
                     UnitId = g.UnitId
                 })
@@ -832,24 +908,48 @@ namespace Grievance_BAL.Services
 
             if (group != null)
             {
-                group.MappedUser = await _dbContext.UserGroupMappings.Where(a => a.GroupId == group.Id && a.UnitId == group.UnitId).Select(m => new GroupMasterUser
+                group.MappedUser = await _dbContext.UserGroupMappings.Where(a => a.GroupId == group.Id && a.UnitId == unitId).Select(m => new GroupMasterUser
                 {
                     UserCode = m.UserCode,
                     UserDetail = m.UserDetails,
-                    Departments = _dbContext.UserDepartmentMappings.Where(a => a.UnitId == group.UnitId && a.UserCode == m.UserCode).Select(a => a.Department).ToList(),
+                    Departments = _dbContext.UserDepartmentMappings.Where(a => a.UnitId == unitId && a.UserCode == m.UserCode).Select(a => a.Department).ToList(),
                 }).ToListAsync();
 
                 var childGroups = await _dbContext.Groups.Where(g => g.ParentGroupId == groupId).ToListAsync();
                 group.ChildGroups = new List<GroupHierarchyResponse>();
                 foreach (var child in childGroups)
                 {
-                    var childHierarchy = await GetGroupHierarchyAsync(child.Id);
+                    var childHierarchy = await GetGroupHierarchyAsync(child.Id, unitId);
                     group.ChildGroups.Add(childHierarchy);
                 }
 
             }
 
             return group;
+        }
+
+        public async Task<UnitRoleUserModel> GetUnitRoleUsersAsync(string unitId, int roleId = 0)
+        {
+            UnitRoleUserModel mappedUsers = new UnitRoleUserModel();
+
+            var assignedUser = await (from g in _dbContext.Groups
+                             join r in _dbContext.AppRoles on g.RoleId equals r.Id
+                             join gm in _dbContext.UserGroupMappings on g.Id equals gm.GroupId
+                             where gm.UnitId == unitId 
+                             && (roleId == 0 || g.RoleId == roleId)
+                             select new UnitRoleUsers
+                             {
+                                 RoleId = r.Id,
+                                 RoleName = r.RoleName,
+                                 UserCode = gm.UserCode,
+                                 UserDetails = gm.UserDetails
+                             }
+                         ).ToListAsync();
+
+            mappedUsers.UnitId = unitId;
+            mappedUsers.MappedUser = assignedUser;
+
+            return mappedUsers;
         }
     }
 }
