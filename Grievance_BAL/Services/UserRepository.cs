@@ -1,4 +1,5 @@
-﻿using System.Data;
+﻿using System.Collections.Generic;
+using System.Data;
 using System.Net;
 using System.Reflection.Emit;
 using Grievance_BAL.IServices;
@@ -253,6 +254,7 @@ namespace Grievance_BAL.Services
                 var userRoles = (from g in _dbContext.Groups
                                  join r in _dbContext.AppRoles on g.RoleId equals r.Id
                                  join gm in _dbContext.UserGroupMappings on g.Id equals gm.GroupId
+                                 where gm.UserCode == empCode && g.IsRoleGroup == true
                                  select r.RoleName
                              ).ToHashSet();
 
@@ -275,7 +277,7 @@ namespace Grievance_BAL.Services
                 {
                     responseModel.StatusCode = HttpStatusCode.OK;
                     responseModel.Message = "User Role Details";
-                    responseModel.Data = userRoles;
+                    responseModel.Data = userRoles.ToList();
                 }
                 else
                 {
@@ -466,78 +468,154 @@ namespace Grievance_BAL.Services
             return responseModel;
         }
 
+        //public async Task<ResponseModel> UpdateUserDepartmentMappingAsync(UserDeptMappingModel mappings)
+        //{
+        //    ResponseModel responseModel = new ResponseModel()
+        //    {
+        //        StatusCode = HttpStatusCode.BadRequest,
+        //        Message = "Bad Request"
+        //    };
+
+        //    var multipleUnit = mappings.UnitId.Contains(",") ? mappings.UnitId.Split(",").ToList() : new List<string> { mappings.UnitId };
+        //    var multipleUnitName = mappings.UnitName.Contains(",") ? mappings.UnitName.Split(",").ToList() : new List<string> { mappings.UnitName };
+
+        //    var removeMapping = _dbContext.UserDepartmentMappings
+        //        .Where(a => a.Department.Trim().ToLower() == mappings.Department.Trim().ToLower() &&
+        //                    multipleUnit.Contains(a.UnitId) &&
+        //                    (mappings.UserCodes == null || !mappings.UserCodes.Select(e => e.UserCode).Contains(a.UserCode)))
+        //        .ToList();
+
+        //    List<UserDepartmentMapping> newMapping = new();
+
+        //    if (mappings.UserCodes != null && mappings.UserCodes.Count > 0)
+        //    {
+        //        var excludeMapping = _dbContext.UserDepartmentMappings
+        //            .Where(a => a.Department.Trim().ToLower() == mappings.Department.Trim().ToLower() &&
+        //                        multipleUnit.Contains(a.UnitId) &&
+        //                        mappings.UserCodes.Select(e => e.UserCode).Contains(a.UserCode))
+        //            .Select(a => new { a.UserCode, a.UnitId })
+        //            .ToList();
+
+        //        foreach (var emp in mappings.UserCodes)
+        //        {
+        //            for (int i = 0; i < multipleUnit.Count; i++)
+        //            {
+        //                var unitId = multipleUnit[i];
+        //                var unitName = multipleUnitName[i];
+
+        //                if (!excludeMapping.Any(b => b.UserCode == emp.UserCode && b.UnitId == unitId))
+        //                {
+        //                    newMapping.Add(new UserDepartmentMapping
+        //                    {
+        //                        Department = mappings.Department,
+        //                        UnitId = unitId,
+        //                        UnitName = unitName,
+        //                        UserCode = emp.UserCode,
+        //                        UserDetails = emp.UserDetails
+        //                    });
+        //                }
+        //            }
+        //        }
+        //    }
+
+        //    if (removeMapping.Any())
+        //    {
+        //        _dbContext.UserDepartmentMappings.RemoveRange(removeMapping);
+        //    }
+
+        //    if (newMapping.Any())
+        //    {
+        //        await _dbContext.UserDepartmentMappings.AddRangeAsync(newMapping);
+        //    }
+
+        //    var resultCount = await _dbContext.SaveChangesAsync();
+        //    if (resultCount > 0)
+        //    {
+        //        responseModel.StatusCode = HttpStatusCode.OK;
+        //        responseModel.Message = "User department mapping updated";
+        //        responseModel.Data = mappings;
+        //        responseModel.DataLength = mappings.UserCodes.Count;
+        //    }
+        //    else
+        //    {
+        //        responseModel.StatusCode = HttpStatusCode.NotModified;
+        //        responseModel.Message = "User department mapping not updated";
+        //    }
+
+        //    return responseModel;
+        //}
+
         public async Task<ResponseModel> UpdateUserDepartmentMappingAsync(UserDeptMappingModel mappings)
         {
-            ResponseModel responseModel = new ResponseModel()
+            ResponseModel responseModel = new()
             {
                 StatusCode = HttpStatusCode.BadRequest,
                 Message = "Bad Request"
             };
 
-            var multipleUnit = mappings.UnitId.Contains(",") ? mappings.UnitId.Split(",").ToList() : new List<string> { mappings.UnitId };
-            var multipleUnitName = mappings.UnitName.Contains(",") ? mappings.UnitName.Split(",").ToList() : new List<string> { mappings.UnitName };
+            var multipleUnit = mappings.UnitId.Split(',').Select(x => x.Trim()).ToList();
+            var multipleUnitName = mappings.UnitName.Split(',').Select(x => x.Trim()).ToList();
 
-            var removeMapping = _dbContext.UserDepartmentMappings
-                .Where(a => a.Department.Trim().ToLower() == mappings.Department.Trim().ToLower() &&
-                            multipleUnit.Contains(a.UnitId) &&
-                            (mappings.UserCodes == null || !mappings.UserCodes.Select(e => e.UserCode).Contains(a.UserCode)))
-                .ToList();
+            var userCodes = mappings.UserCodes?.Select(u => u.UserCode).ToList() ?? new List<string>();
+            var userDetailsDict = mappings.UserCodes?.ToDictionary(u => u.UserCode, u => u.UserDetails) ?? new Dictionary<string, string>();
 
-            List<UserDepartmentMapping> newMapping = new();
-
-            if (mappings.UserCodes != null && mappings.UserCodes.Count > 0)
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
             {
-                var excludeMapping = _dbContext.UserDepartmentMappings
-                    .Where(a => a.Department.Trim().ToLower() == mappings.Department.Trim().ToLower() &&
-                                multipleUnit.Contains(a.UnitId) &&
-                                mappings.UserCodes.Select(e => e.UserCode).Contains(a.UserCode))
-                    .Select(a => new { a.UserCode, a.UnitId })
+                List<UserDepartmentMapping> newMappings = new();
+
+                foreach (var userCode in userCodes)
+                {
+                    var existingMappings = _dbContext.UserDepartmentMappings
+                    .Where(a => multipleUnit.Contains(a.UnitId) && a.UserCode == userCode)
                     .ToList();
 
-                foreach (var emp in mappings.UserCodes)
-                {
-                    for (int i = 0; i < multipleUnit.Count; i++)
+                    if (existingMappings.Any())
                     {
-                        var unitId = multipleUnit[i];
-                        var unitName = multipleUnitName[i];
+                        _dbContext.UserDepartmentMappings.RemoveRange(existingMappings);
+                    }
 
-                        if (!excludeMapping.Any(b => b.UserCode == emp.UserCode && b.UnitId == unitId))
+                    foreach (var unitId in multipleUnit)
+                    {
+                        foreach (var department in mappings.Department)
                         {
-                            newMapping.Add(new UserDepartmentMapping
+                            newMappings.Add(new UserDepartmentMapping
                             {
-                                Department = mappings.Department,
+                                Department = department,
                                 UnitId = unitId,
-                                UnitName = unitName,
-                                UserCode = emp.UserCode,
-                                UserDetails = emp.UserDetails
+                                UnitName = multipleUnitName[multipleUnit.IndexOf(unitId)],
+                                UserCode = userCode,
+                                UserDetails = userDetailsDict[userCode]
                             });
                         }
                     }
                 }
-            }
 
-            if (removeMapping.Any())
-            {
-                _dbContext.UserDepartmentMappings.RemoveRange(removeMapping);
-            }
+                if (newMappings.Any())
+                {
+                    await _dbContext.UserDepartmentMappings.AddRangeAsync(newMappings);
+                }
 
-            if (newMapping.Any())
-            {
-                await _dbContext.UserDepartmentMappings.AddRangeAsync(newMapping);
+                var resultCount = await _dbContext.SaveChangesAsync();
+                if (resultCount > 0)
+                {
+                    await transaction.CommitAsync();
+                    responseModel.StatusCode = HttpStatusCode.OK;
+                    responseModel.Message = "User Department Mapping Updated Successfully";
+                    responseModel.Data = mappings;
+                    responseModel.DataLength = newMappings.Count;
+                }
+                else
+                {
+                    responseModel.StatusCode = HttpStatusCode.NotModified;
+                    responseModel.Message = "No changes made to User Department Mapping";
+                }
             }
-
-            var resultCount = await _dbContext.SaveChangesAsync();
-            if (resultCount > 0)
+            catch (Exception ex)
             {
-                responseModel.StatusCode = HttpStatusCode.OK;
-                responseModel.Message = "User department mapping updated";
-                responseModel.Data = mappings;
-                responseModel.DataLength = mappings.UserCodes.Count;
-            }
-            else
-            {
-                responseModel.StatusCode = HttpStatusCode.NotModified;
-                responseModel.Message = "User department mapping not updated";
+                await transaction.RollbackAsync();
+                responseModel.StatusCode = HttpStatusCode.InternalServerError;
+                responseModel.Message = $"Error: {ex.Message}";
             }
 
             return responseModel;
@@ -873,7 +951,7 @@ namespace Grievance_BAL.Services
             var corporateUnitId = _configuration["FinalCommiteeUnit"].ToString();
 
             var rootGroup = await _dbContext.Groups
-                .Where(g => g.ParentGroupId == null && ((corporateUnitId == unitId) ? g.UnitId == corporateUnitId : g.UnitId != corporateUnitId))
+                .Where(g => g.ParentGroupId == null && ((corporateUnitId == unitId) ? g.UnitId == corporateUnitId : g.UnitId != corporateUnitId) && (g.IsActive == true || g.IsActive == null))
                 .Select(g => new { g.Id })
                 .FirstOrDefaultAsync();
 
@@ -893,7 +971,7 @@ namespace Grievance_BAL.Services
         private async Task<GroupHierarchyResponse> GetGroupHierarchyAsync(int groupId, string unitId)
         {
             var group = await _dbContext.Groups
-                .Where(g => g.Id == groupId)
+                .Where(g => g.Id == groupId && (g.IsActive == null || g.IsActive == true))
                 .Select(g => new GroupHierarchyResponse
                 {
                     Id = g.Id,
@@ -915,7 +993,7 @@ namespace Grievance_BAL.Services
                     Departments = _dbContext.UserDepartmentMappings.Where(a => a.UnitId == unitId && a.UserCode == m.UserCode).Select(a => a.Department).ToList(),
                 }).ToListAsync();
 
-                var childGroups = await _dbContext.Groups.Where(g => g.ParentGroupId == groupId).ToListAsync();
+                var childGroups = await _dbContext.Groups.Where(g => g.ParentGroupId == groupId && (g.IsActive == null || g.IsActive == true)).ToListAsync();
                 group.ChildGroups = new List<GroupHierarchyResponse>();
                 foreach (var child in childGroups)
                 {
@@ -933,17 +1011,18 @@ namespace Grievance_BAL.Services
             UnitRoleUserModel mappedUsers = new UnitRoleUserModel();
 
             var assignedUser = await (from g in _dbContext.Groups
-                             join r in _dbContext.AppRoles on g.RoleId equals r.Id
-                             join gm in _dbContext.UserGroupMappings on g.Id equals gm.GroupId
-                             where gm.UnitId == unitId 
-                             && (roleId == 0 || g.RoleId == roleId)
-                             select new UnitRoleUsers
-                             {
-                                 RoleId = r.Id,
-                                 RoleName = r.RoleName,
-                                 UserCode = gm.UserCode,
-                                 UserDetails = gm.UserDetails
-                             }
+                                      join r in _dbContext.AppRoles on g.RoleId equals r.Id
+                                      join gm in _dbContext.UserGroupMappings on g.Id equals gm.GroupId
+                                      where gm.UnitId == unitId
+                                      && (roleId == 0 || g.RoleId == roleId)
+                                      select new UnitRoleUsers
+                                      {
+                                          RoleId = r.Id,
+                                          RoleName = r.RoleName,
+                                          UserCode = gm.UserCode,
+                                          UserDetails = gm.UserDetails,
+                                          Group = new { GroupId = g.Id, GroupName = g.GroupName }
+                                      }
                          ).ToListAsync();
 
             mappedUsers.UnitId = unitId;
@@ -951,5 +1030,79 @@ namespace Grievance_BAL.Services
 
             return mappedUsers;
         }
+
+        public async Task<ResponseModel> GetServiceMasterAsync(bool isCorporate)
+        {
+            ResponseModel responseModel = new ResponseModel
+            {
+                StatusCode = HttpStatusCode.BadRequest,
+                Message = "Bad Request"
+            };
+
+            var corporateUnitId = _configuration["FinalCommiteeUnit"].ToString();
+            var serviceList = await _dbContext.Groups.Where(s => (s.IsActive == null || s.IsActive == true) && (isCorporate ? s.UnitId == corporateUnitId : s.UnitId != corporateUnitId)).Select(s => new ServiceGroupModel
+            {
+                Id = s.Id,
+                GroupName = s.GroupName,
+                IsServiceCategory = s.IsServiceCategory,
+                IsActive = s.IsActive,
+                ParentGroupId = s.ParentGroupId
+
+            }).ToListAsync();
+            var finalServiceHierarchy = GetServiceGroups(serviceList);
+
+            if (finalServiceHierarchy.Count == 0)
+            {
+                responseModel.Message = "Service Not Found";
+                responseModel.StatusCode = HttpStatusCode.NotFound;
+            }
+            else
+            {
+                responseModel.Message = "Service List Found";
+                responseModel.Data = finalServiceHierarchy;
+                responseModel.StatusCode = HttpStatusCode.OK;
+            }
+
+            return responseModel;
+        }
+
+        public static List<ServiceGroupModel> GetServiceGroups(List<ServiceGroupModel> allGroups)
+        {
+            var groupDict = allGroups.ToDictionary(g => g.Id);
+
+            Func<int?, List<ServiceGroupModel>> BuildHierarchy = null;
+            BuildHierarchy = (parentId) =>
+            {
+                return allGroups
+                    .Where(g => g.ParentGroupId == parentId)
+                    .SelectMany(g =>
+                    {
+                        if (g.IsServiceCategory == true)
+                        {
+                            return new List<ServiceGroupModel>
+                            {
+                        new ServiceGroupModel
+                        {
+                            Id = g.Id,
+                            GroupName = g.GroupName,
+                            ParentGroupId = g.ParentGroupId,
+                            IsActive = g.IsActive,
+                            IsServiceCategory = g.IsServiceCategory,
+                            ChildGroup = BuildHierarchy(g.Id)
+                        }
+                            };
+                        }
+                        else
+                        {
+                            return BuildHierarchy(g.Id);
+                        }
+                    })
+                    .ToList();
+            };
+
+            return BuildHierarchy(null);
+        }
+
+
     }
 }

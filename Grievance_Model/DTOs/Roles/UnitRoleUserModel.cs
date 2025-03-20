@@ -1,4 +1,6 @@
-﻿namespace Grievance_Model.DTOs.Roles
+﻿using Grievance_Model.DTOs.Group;
+
+namespace Grievance_Model.DTOs.Roles
 {
     public class UnitRoleUserModel
     {
@@ -12,5 +14,6 @@
         public string RoleName { get; set; }
         public string UserCode { get; set; }
         public string UserDetails { get; set; }
+        public object Group { get; set; }
     }
 }

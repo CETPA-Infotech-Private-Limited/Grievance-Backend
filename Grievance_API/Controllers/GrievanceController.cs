@@ -70,5 +70,10 @@ namespace Grievance_API.Controllers
         {
             return await _grievanceRepository.GetMyDashboardDataAsync(userCode);
         }
+        [HttpGet("GetResolutionData")]
+        public async Task<ResponseModel> GetResolutionData(int grievanceMasterId)
+        {
+            return await _grievanceRepository.GetResolutionDataAsync(grievanceMasterId);
+        }
     }
 }

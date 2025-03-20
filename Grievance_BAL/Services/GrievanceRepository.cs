@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Collections.Immutable;
+using System.Net;
 using System.Text;
 using Grievance_BAL.IServices;
 using Grievance_DAL.DatabaseContext;
@@ -11,6 +12,7 @@ using Grievance_Utility;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Grievance_BAL.Services
 {
@@ -124,7 +126,7 @@ namespace Grievance_BAL.Services
                                                     join gpMst in _dbContext.Groups on gp.TGroupId equals gpMst.Id
                                                     where gp.AssignedUserCode == userCode
                                                     || (userGroups.Where(a => a.GroupId == gp.TGroupId && a.UnitId == gp.TUnitId).Any()
-                                                           && userDepartments.Where(a => a.Department.Trim().ToLower() == gp.TDepartment.Trim().ToLower() && a.UnitId == gp.TUnitId).Any())
+                                                           && userDepartments.Where(a => a.Department == gp.TDepartment && a.UnitId == gp.TUnitId).Any())
                                                     select gm.Id);
 
                     }
@@ -136,7 +138,7 @@ namespace Grievance_BAL.Services
                                                 join gpMst in _dbContext.Groups on gp.TGroupId equals gpMst.Id
                                                 where gp.AssignedUserCode == userCode
                                                    || (userGroups.Where(a => a.GroupId == gp.TGroupId && a.UnitId == gp.TUnitId).Any()
-                                                          && userDepartments.Where(a => a.Department.Trim().ToLower() == gp.TDepartment.Trim().ToLower() && a.UnitId == gp.TUnitId).Any())
+                                                          && userDepartments.Where(a => a.Department == gp.TDepartment && a.UnitId == gp.TUnitId).Any())
                                                 select gm.Id);
                 }
                 grievanceMasterIds = grievanceMasterIds.Distinct().ToList();
@@ -265,6 +267,14 @@ namespace Grievance_BAL.Services
                 Message = "Bad Request",
             };
 
+            var existingGrievance = await _dbContext.GrievanceMasters.Where(a => a.UserCode == grievanceModel.UserCode && a.GroupId == grievanceModel.TGroupId && a.StatusId != (int)Grievance_Utility.GrievanceStatus.Closed).FirstOrDefaultAsync();
+            if(existingGrievance != null)
+            {
+                responseModel.StatusCode = HttpStatusCode.AlreadyReported;
+                responseModel.Message = "Grievance already in process.";
+                return responseModel;
+            }
+
             IDbContextTransaction transaction = await _dbContext.Database.BeginTransactionAsync();
             var grievanceMaster = _dbContext.GrievanceMasters.Where(x => x.Id == grievanceModel.GrievanceMasterId).FirstOrDefault();
             var userDetails = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(grievanceModel.UserCode));
@@ -280,7 +290,8 @@ namespace Grievance_BAL.Services
                     UserDetails = grievanceModel.IsInternal ? (!string.IsNullOrEmpty(userDetails.empName) ? userDetails.empName : "NA") + (!string.IsNullOrEmpty(userDetails.empCode) ? " (" + userDetails.empCode + ")" : "") + (!string.IsNullOrEmpty(userDetails.designation) ? " - " + userDetails.designation : "") + (!string.IsNullOrEmpty(userDetails.department) ? " | " + userDetails.department : "") : string.Empty,
                     UnitId = userDetails.unitId.ToString(),
                     UnitName = userDetails.units,
-                    Department = userDetails.department,
+                    Department = grievanceModel.TDepartment,
+                    GroupId = grievanceModel.TGroupId.Value,
                     Round = (int)Grievance_Utility.GrievanceRound.First,
                     StatusId = (int)Grievance_Utility.GrievanceStatus.Open,
                     RowStatus = Grievance_Utility.RowStatus.Active,
@@ -312,12 +323,10 @@ namespace Grievance_BAL.Services
                     var FinalCommiteeUnit = _configuration["FinalCommiteeUnit"].ToString();
                     if (FinalCommiteeUnit == userDetails.unitId.ToString())
                     {
-                        var addressal = (from g in _dbContext.GrievanceMasters
-                                         join ug in _dbContext.UserGroupMappings on g.GroupId equals ug.GroupId
+                        var addressal = (from ug in _dbContext.UserGroupMappings
                                          join ud in _dbContext.UserDepartmentMappings on ug.UserCode equals ud.UserCode
-                                         where (userDetails.unitId.ToString() == FinalCommiteeUnit
-                                         && (ug.GroupId == g.GroupId && ug.UnitId == g.UnitId.ToString())
-                                         && ud.Department.Trim().ToLower() == userDetails.department.Trim().ToLower())
+                                         where (ug.UnitId == FinalCommiteeUnit
+                                         && ud.Department == userDetails.department && ug.GroupId == grievanceModel.TGroupId)
                                          select new
                                          {
                                              UserCode = ug.UserCode,
@@ -331,9 +340,8 @@ namespace Grievance_BAL.Services
                     }
                     else
                     {
-                        var addressal = (from g in _dbContext.GrievanceMasters
-                                         join ug in _dbContext.UserGroupMappings on g.GroupId equals ug.GroupId
-                                         where ug.GroupId == g.GroupId && ug.UnitId == g.UnitId.ToString()
+                        var addressal = (from ug in _dbContext.UserGroupMappings
+                                         where ug.GroupId == grievanceModel.TGroupId && ug.UnitId == grievanceModel.TUnitId
                                          select new
                                          {
                                              UserCode = ug.UserCode,
@@ -348,11 +356,10 @@ namespace Grievance_BAL.Services
 
                     if (string.IsNullOrEmpty(addressalCode) && string.IsNullOrEmpty(addressalDetail))
                     {
-                        var addressal = (from g in _dbContext.GrievanceMasters
-                                         join ug in _dbContext.UserGroupMappings on g.GroupId equals ug.GroupId
+                        var addressal = (from ug in _dbContext.UserGroupMappings
                                          join gmst in _dbContext.Groups on ug.GroupId equals gmst.Id
                                          join ar in _dbContext.AppRoles on gmst.RoleId equals ar.Id
-                                         where ar.RoleName == Constant.AppRoles.NodalOfficer && ug.UnitId == g.UnitId.ToString()
+                                         where ar.RoleName == Constant.AppRoles.NodalOfficer && ug.UnitId == grievanceModel.TUnitId
                                          select new
                                          {
                                              UserCode = ug.UserCode,
@@ -437,7 +444,7 @@ namespace Grievance_BAL.Services
                 }
 
                 // to send the resolution link to requestor or sent to commitee mail
-                if (grievanceProcessObj.StatusId == (int)Grievance_Utility.GrievanceStatus.Closed)
+                if (grievanceProcessObj.StatusId == (int)Grievance_Utility.GrievanceStatus.Closed && grievanceMaster?.CreatedBy == Convert.ToInt32(grievanceModel.UserCode))
                 {
                     if (grievanceMaster.Round < 3)
                     {
@@ -656,7 +663,7 @@ namespace Grievance_BAL.Services
                     _dbContext.Update(grievanceMaster);
                     _dbContext.SaveChanges();
 
-                    var lastResolverUnit = _dbContext.GrievanceProcesses.Where(a => a.GrievanceMasterId == grievanceMaster.Id && a.StatusId == (int)Grievance_Utility.GrievanceStatus.Closed).Select(a => a.TUnitId).FirstOrDefault();
+                    var lastResolverUnit = _dbContext.GrievanceProcesses.Where(a => a.GrievanceMasterId == grievanceMaster.Id && a.StatusId == (int)Grievance_Utility.GrievanceStatus.Closed && a.Round == (int)Grievance_Utility.GrievanceRound.First).OrderByDescending(a => a.Id).Select(a => a.TUnitId).FirstOrDefault();
 
                     var nodalOfficer = (from r in _dbContext.AppRoles
                                         join rm in _dbContext.UserRoleMappings on r.Id equals rm.RoleId
@@ -1253,6 +1260,40 @@ namespace Grievance_BAL.Services
             responseModel.StatusCode = HttpStatusCode.OK;
             responseModel.Message = "Dashboard data retrieved successfully.";
             responseModel.Data = finalData;
+
+            return responseModel;
+        }
+
+        public async Task<ResponseModel> GetResolutionDataAsync(int grievanceMasterId)
+        {
+            ResponseModel responseModel = new ResponseModel
+            {
+                StatusCode = HttpStatusCode.BadRequest,
+                Message = "Bad Request"
+            };
+
+            if (grievanceMasterId == 0)
+            {
+                return new ResponseModel
+                {
+                    StatusCode = HttpStatusCode.NotFound,
+                    Message = "Grievance not found."
+                };
+            }
+
+            var resolution = await _dbContext.ResolutionDetails.Where(a => a.GrievanceMasterId == grievanceMasterId && a.ResolutionStatus == Constant.ResolutionStatus.Pending && a.Round < 3).OrderByDescending(a => a.Id).FirstOrDefaultAsync();
+
+            if (resolution != null)
+            {
+                responseModel.StatusCode = HttpStatusCode.OK;
+                responseModel.Message = "Resolution data retrieved successfully.";
+                responseModel.Data = resolution;
+            }
+            else
+            {
+                responseModel.StatusCode = HttpStatusCode.OK;
+                responseModel.Message = "Resolution data not found.";
+            }
 
             return responseModel;
         }

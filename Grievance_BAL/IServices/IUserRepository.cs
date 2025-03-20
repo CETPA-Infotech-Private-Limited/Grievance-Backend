@@ -25,6 +25,7 @@ namespace Grievance_BAL.IServices
         Task<ResponseModel> AddUpdateGroupNewAsync(GroupMasterModel groupModel);
         Task<ResponseModel> GetOrgGroupHierarchyAsync(string unitId);
         Task<UnitRoleUserModel> GetUnitRoleUsersAsync(string unitId, int roleId = 0);
+        Task<ResponseModel> GetServiceMasterAsync(bool isCorporate);
 
     }
 }

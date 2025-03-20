@@ -2,7 +2,7 @@
 {
     public class UserDeptMappingModel
     {
-        public string Department { get; set; }
+        public List<string> Department { get; set; }
         public string UnitId { get; set; }
         public string UnitName { get; set; }
         public List<DepartmentUser>? UserCodes { get; set; }

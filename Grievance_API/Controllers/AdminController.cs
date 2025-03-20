@@ -89,6 +89,15 @@ namespace Grievance_API.Controllers
         {
             return await userRepository.GetOrgGroupHierarchyAsync(unitId);
         }
-        
+        [HttpGet("GetUnitRoleUsers")]
+        public async Task<UnitRoleUserModel> GetUnitRoleUsers(string unitId, int roleId = 0)
+        {
+            return await userRepository.GetUnitRoleUsersAsync(unitId, roleId);
+        }
+        [HttpGet("GetServiceMaster")]
+        public async Task<ResponseModel> GetServiceMaster(bool isCorporate)
+        {
+            return await userRepository.GetServiceMasterAsync(isCorporate);
+        }
     }
 }
