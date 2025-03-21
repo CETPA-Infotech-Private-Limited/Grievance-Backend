@@ -267,13 +267,13 @@ namespace Grievance_BAL.Services
                 Message = "Bad Request",
             };
 
-            var existingGrievance = await _dbContext.GrievanceMasters.Where(a => a.UserCode == grievanceModel.UserCode && a.GroupId == grievanceModel.TGroupId && a.StatusId != (int)Grievance_Utility.GrievanceStatus.Closed).FirstOrDefaultAsync();
-            if(existingGrievance != null)
-            {
-                responseModel.StatusCode = HttpStatusCode.AlreadyReported;
-                responseModel.Message = "Grievance already in process.";
-                return responseModel;
-            }
+            //var existingGrievance = await _dbContext.GrievanceMasters.Where(a => a.UserCode == grievanceModel.UserCode && a.GroupId == grievanceModel.TGroupId).OrderByDescending(a => a.Id).FirstOrDefaultAsync();
+            //if (existingGrievance != null && existingGrievance.StatusId != (int)Grievance_Utility.GrievanceStatus.Closed && grievanceModel.GrievanceMasterId == 0)
+            //{
+            //    responseModel.StatusCode = HttpStatusCode.AlreadyReported;
+            //    responseModel.Message = "Grievance already in process.";
+            //    return responseModel;
+            //}
 
             IDbContextTransaction transaction = await _dbContext.Database.BeginTransactionAsync();
             var grievanceMaster = _dbContext.GrievanceMasters.Where(x => x.Id == grievanceModel.GrievanceMasterId).FirstOrDefault();
@@ -444,7 +444,7 @@ namespace Grievance_BAL.Services
                 }
 
                 // to send the resolution link to requestor or sent to commitee mail
-                if (grievanceProcessObj.StatusId == (int)Grievance_Utility.GrievanceStatus.Closed && grievanceMaster?.CreatedBy == Convert.ToInt32(grievanceModel.UserCode))
+                if (grievanceProcessObj.StatusId == (int)Grievance_Utility.GrievanceStatus.Closed && grievanceMaster?.CreatedBy != Convert.ToInt32(grievanceModel.UserCode))
                 {
                     if (grievanceMaster.Round < 3)
                     {
@@ -566,6 +566,7 @@ namespace Grievance_BAL.Services
 
                 if (resolutionApproval != null)
                 {
+                    var transaction = _dbContext.Database.BeginTransaction();
                     var grievance = await _dbContext.GrievanceMasters.Where(x => x.Id == resolutionApproval.GrievanceMasterId)
                         .FirstOrDefaultAsync();
 
@@ -627,6 +628,7 @@ namespace Grievance_BAL.Services
                         }
                         _dbContext.SaveChanges();
                     }
+                    transaction.Commit();
                     responseDetails.StatusCode = HttpStatusCode.OK;
                 }
             }
@@ -642,101 +644,95 @@ namespace Grievance_BAL.Services
                 Message = "Bad Request",
             };
 
-            using (var transaction = await _dbContext.Database.BeginTransactionAsync())
+            try
             {
-                try
+                var grievanceMaster = await _dbContext.GrievanceMasters
+                    .FirstOrDefaultAsync(x => x.Id == grievanceMasterId);
+
+                if (grievanceMaster == null)
                 {
-                    var grievanceMaster = await _dbContext.GrievanceMasters
-                        .FirstOrDefaultAsync(x => x.Id == grievanceMasterId);
-
-                    if (grievanceMaster == null)
+                    return new ResponseModel
                     {
-                        return new ResponseModel
-                        {
-                            StatusCode = HttpStatusCode.NotFound,
-                            Message = "Grievance record not found."
-                        };
-                    }
-                    grievanceMaster.Round = (int)Grievance_Utility.GrievanceRound.Second;
-                    grievanceMaster.StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress;
+                        StatusCode = HttpStatusCode.NotFound,
+                        Message = "Grievance record not found."
+                    };
+                }
+                grievanceMaster.Round = (int)Grievance_Utility.GrievanceRound.Second;
+                grievanceMaster.StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress;
 
-                    _dbContext.Update(grievanceMaster);
-                    _dbContext.SaveChanges();
+                _dbContext.Update(grievanceMaster);
+                _dbContext.SaveChanges();
 
-                    var lastResolverUnit = _dbContext.GrievanceProcesses.Where(a => a.GrievanceMasterId == grievanceMaster.Id && a.StatusId == (int)Grievance_Utility.GrievanceStatus.Closed && a.Round == (int)Grievance_Utility.GrievanceRound.First).OrderByDescending(a => a.Id).Select(a => a.TUnitId).FirstOrDefault();
+                var lastResolverUnit = _dbContext.GrievanceProcesses.Where(a => a.GrievanceMasterId == grievanceMaster.Id && a.StatusId == (int)Grievance_Utility.GrievanceStatus.Closed && a.Round == (int)Grievance_Utility.GrievanceRound.First).OrderByDescending(a => a.Id).Select(a => a.TUnitId).FirstOrDefault();
 
-                    var nodalOfficer = (from r in _dbContext.AppRoles
-                                        join rm in _dbContext.UserRoleMappings on r.Id equals rm.RoleId
-                                        where r.RoleName == Constant.AppRoles.NodalOfficer && rm.UnitId ==
-                                        lastResolverUnit
-                                        select new { rm.UserCode, rm.UserDetails }).FirstOrDefault();
+                var nodalOfficer = (from r in _dbContext.AppRoles
+                                    join g in _dbContext.Groups on r.Id equals g.RoleId
+                                    join gm in _dbContext.UserGroupMappings on g.Id equals gm.GroupId
+                                    where r.RoleName == Constant.AppRoles.NodalOfficer && gm.UnitId ==
+                                    lastResolverUnit
+                                    select new { gm.UserCode, gm.UserDetails }).FirstOrDefault();
 
-                    if (nodalOfficer == null)
+                if (nodalOfficer == null)
+                {
+                    return new ResponseModel
                     {
-                        return new ResponseModel
-                        {
-                            StatusCode = HttpStatusCode.NotFound,
-                            Message = "No Nodal Officer found for this unit."
-                        };
-                    }
-                    var tGroupId = 0;
-                    if (lastResolverUnit == _configuration["FinalCommiteeUnit"].ToString())
-                        tGroupId = _dbContext.Groups.Where(a => a.UnitId == lastResolverUnit).Select(a => a.Id).FirstOrDefault();
-                    else
-                        tGroupId = _dbContext.Groups.Where(a => a.UnitId != lastResolverUnit).Select(a => a.Id).FirstOrDefault();
+                        StatusCode = HttpStatusCode.NotFound,
+                        Message = "No Nodal Officer found for this unit."
+                    };
+                }
+                var tGroupId = 0;
+                if (lastResolverUnit == _configuration["FinalCommiteeUnit"].ToString())
+                    tGroupId = _dbContext.Groups.Where(a => a.UnitId == lastResolverUnit).Select(a => a.Id).FirstOrDefault();
+                else
+                    tGroupId = _dbContext.Groups.Where(a => a.UnitId != lastResolverUnit).Select(a => a.Id).FirstOrDefault();
 
-                    GrievanceProcess grievanceProcessObj = new GrievanceProcess()
+                GrievanceProcess grievanceProcessObj = new GrievanceProcess()
+                {
+                    GrievanceMasterId = grievanceMasterId,
+                    Title = grievanceMaster.Title,
+                    Description = grievanceMaster.Description,
+                    Round = (int)Grievance_Utility.GrievanceRound.Second,
+                    StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress,
+                    RowStatus = Grievance_Utility.RowStatus.Active,
+                    AssignedUserCode = nodalOfficer.UserCode,
+                    AssignedUserDetails = nodalOfficer.UserDetails,
+                    CreatedBy = Convert.ToInt32(grievanceMaster.UserCode),
+                    CreatedDate = DateTime.Now,
+
+                    TGroupId = tGroupId,
+                    TUnitId = lastResolverUnit,
+                    TDepartment = null
+                };
+
+                _dbContext.GrievanceProcesses.Add(grievanceProcessObj);
+                await _dbContext.SaveChangesAsync();
+
+                if (!string.IsNullOrEmpty(comment))
+                {
+                    CommentDetail newComment = new CommentDetail()
                     {
-                        GrievanceMasterId = grievanceMasterId,
-                        Title = grievanceMaster.Title,
-                        Description = grievanceMaster.Description,
-                        Round = (int)Grievance_Utility.GrievanceRound.Second,
-                        StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress,
-                        RowStatus = Grievance_Utility.RowStatus.Active,
-                        AssignedUserCode = nodalOfficer.UserCode,
-                        AssignedUserDetails = nodalOfficer.UserDetails,
+                        CommentText = comment,
+                        CommentedBy = grievanceMaster.UserCode,
+                        CommentDate = DateTime.Now,
+                        CommentType = Constant.CommentType.GrievanceProcess,
+                        ReferenceId = grievanceProcessObj.Id,
+
                         CreatedBy = Convert.ToInt32(grievanceMaster.UserCode),
                         CreatedDate = DateTime.Now,
-
-                        TGroupId = tGroupId,
-                        TUnitId = lastResolverUnit,
-                        TDepartment = null
                     };
-
-                    _dbContext.GrievanceProcesses.Add(grievanceProcessObj);
-                    await _dbContext.SaveChangesAsync();
-
-                    if (!string.IsNullOrEmpty(comment))
-                    {
-                        CommentDetail newComment = new CommentDetail()
-                        {
-                            CommentText = comment,
-                            CommentedBy = grievanceMaster.UserCode,
-                            CommentDate = DateTime.Now,
-                            CommentType = Constant.CommentType.GrievanceProcess,
-                            ReferenceId = grievanceProcessObj.Id,
-
-                            CreatedBy = Convert.ToInt32(grievanceMaster.UserCode),
-                            CreatedDate = DateTime.Now,
-                        };
-                        _dbContext.Comments.Add(newComment);
-                        _dbContext.SaveChanges();
-                    }
-
-                    await transaction.CommitAsync();
-
-                    responseModel.StatusCode = HttpStatusCode.OK;
-                    responseModel.Message = "Second round of grievance initiated successfully.";
-                    responseModel.Data = grievanceProcessObj.Id;
+                    _dbContext.Comments.Add(newComment);
+                    _dbContext.SaveChanges();
                 }
-                catch (Exception ex)
-                {
-                    await transaction.RollbackAsync();
-                    responseModel.StatusCode = HttpStatusCode.InternalServerError;
-                    responseModel.Message = "An error occurred: " + ex.Message;
-                }
+
+                responseModel.StatusCode = HttpStatusCode.OK;
+                responseModel.Message = "Second round of grievance initiated successfully.";
+                responseModel.Data = grievanceProcessObj.Id;
             }
-
+            catch (Exception ex)
+            {
+                responseModel.StatusCode = HttpStatusCode.InternalServerError;
+                responseModel.Message = "An error occurred: " + ex.Message;
+            }
             return responseModel;
         }
 
@@ -748,139 +744,132 @@ namespace Grievance_BAL.Services
                 Message = "Bad Request",
             };
 
-            using (var transaction = await _dbContext.Database.BeginTransactionAsync())
+            try
             {
-                try
+                var grievanceMaster = await _dbContext.GrievanceMasters
+                    .FirstOrDefaultAsync(x => x.Id == grievanceMasterId);
+
+                if (grievanceMaster == null)
                 {
-                    var grievanceMaster = await _dbContext.GrievanceMasters
-                        .FirstOrDefaultAsync(x => x.Id == grievanceMasterId);
-
-                    if (grievanceMaster == null)
+                    return new ResponseModel
                     {
-                        return new ResponseModel
-                        {
-                            StatusCode = HttpStatusCode.NotFound,
-                            Message = "Grievance record not found."
-                        };
-                    }
-
-                    grievanceMaster.Round = (int)Grievance_Utility.GrievanceRound.Third;
-                    grievanceMaster.StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress;
-
-                    _dbContext.Update(grievanceMaster);
-                    await _dbContext.SaveChangesAsync();
-
-                    var requestorDetails = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(grievanceMaster.CreatedBy));
-
-                    var committeeMember = (from r in _dbContext.AppRoles
-                                           join rm in _dbContext.UserRoleMappings on r.Id equals rm.RoleId
-                                           join g in _dbContext.Groups on r.Id equals g.RoleId
-                                           where r.RoleName == Constant.AppRoles.Committee
-                                           select new
-                                           {
-                                               UserCode = rm.UserCode,
-                                               UserDetails = rm.UserDetails,
-                                               UnitId = rm.UnitId,
-                                               GroupId = g.Id
-                                           }).FirstOrDefault();
-
-                    if (committeeMember == null)
-                    {
-                        return new ResponseModel
-                        {
-                            StatusCode = HttpStatusCode.NotFound,
-                            Message = "No committee member found for this grievance."
-                        };
-                    }
-
-                    GrievanceProcess grievanceProcessObj = new GrievanceProcess()
-                    {
-                        GrievanceMasterId = grievanceMasterId,
-                        Title = grievanceMaster.Title,
-                        Description = grievanceMaster.Description,
-                        //ServiceId = grievanceMaster.ServiceId,
-                        Round = (int)Grievance_Utility.GrievanceRound.Third,
-                        StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress,
-                        RowStatus = Grievance_Utility.RowStatus.Active,
-                        AssignedUserCode = committeeMember.UserCode,
-                        AssignedUserDetails = committeeMember.UserDetails,
-                        CreatedBy = Convert.ToInt32(grievanceMaster.UserCode),
-                        CreatedDate = DateTime.Now,
-
-                        TGroupId = committeeMember.GroupId,
-                        TUnitId = committeeMember.UnitId,
-                        TDepartment = null
+                        StatusCode = HttpStatusCode.NotFound,
+                        Message = "Grievance record not found."
                     };
+                }
 
-                    _dbContext.GrievanceProcesses.Add(grievanceProcessObj);
-                    var isForwardedToCommitee = await _dbContext.SaveChangesAsync();
-                    if (isForwardedToCommitee > 0 && !string.IsNullOrEmpty(grievanceMaster.UserEmail))
+                grievanceMaster.Round = (int)Grievance_Utility.GrievanceRound.Third;
+                grievanceMaster.StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress;
+
+                _dbContext.Update(grievanceMaster);
+                await _dbContext.SaveChangesAsync();
+
+                var requestorDetails = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(grievanceMaster.CreatedBy));
+
+                var committeeMember = (from r in _dbContext.AppRoles
+                                       join g in _dbContext.Groups on r.Id equals g.RoleId
+                                       join gm in _dbContext.UserGroupMappings on g.Id equals gm.GroupId
+                                       where r.RoleName == Constant.AppRoles.Committee
+                                       select new
+                                       {
+                                           UserCode = gm.UserCode,
+                                           UserDetails = gm.UserDetails,
+                                           UnitId = gm.UnitId,
+                                           GroupId = g.Id
+                                       }).FirstOrDefault();
+
+                if (committeeMember == null)
+                {
+                    return new ResponseModel
                     {
-                        List<string> _emailToId = new List<string>()
+                        StatusCode = HttpStatusCode.NotFound,
+                        Message = "No committee member found for this grievance."
+                    };
+                }
+
+                GrievanceProcess grievanceProcessObj = new GrievanceProcess()
+                {
+                    GrievanceMasterId = grievanceMasterId,
+                    Title = grievanceMaster.Title,
+                    Description = grievanceMaster.Description,
+                    //ServiceId = grievanceMaster.ServiceId,
+                    Round = (int)Grievance_Utility.GrievanceRound.Third,
+                    StatusId = (int)Grievance_Utility.GrievanceStatus.InProgress,
+                    RowStatus = Grievance_Utility.RowStatus.Active,
+                    AssignedUserCode = committeeMember.UserCode,
+                    AssignedUserDetails = committeeMember.UserDetails,
+                    CreatedBy = Convert.ToInt32(grievanceMaster.UserCode),
+                    CreatedDate = DateTime.Now,
+
+                    TGroupId = committeeMember.GroupId,
+                    TUnitId = committeeMember.UnitId,
+                    TDepartment = null
+                };
+
+                _dbContext.GrievanceProcesses.Add(grievanceProcessObj);
+                var isForwardedToCommitee = await _dbContext.SaveChangesAsync();
+                if (isForwardedToCommitee > 0 && !string.IsNullOrEmpty(grievanceMaster.UserEmail))
+                {
+                    List<string> _emailToId = new List<string>()
                         {
                             grievanceMaster.UserEmail
                         };
 
-                        StringBuilder getEmailTemplate = new StringBuilder();
-                        var rootPath = Directory.GetCurrentDirectory();
+                    StringBuilder getEmailTemplate = new StringBuilder();
+                    var rootPath = Directory.GetCurrentDirectory();
 
-                        string htmlFilePath = rootPath + @"\wwwroot\EmailTemplate\ForwardedToCommitee.html";
-                        using (StreamReader reader = File.OpenText(htmlFilePath))
-                        {
-                            getEmailTemplate.Append(reader.ReadToEnd());
-                        }
-
-                        var requestor = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(grievanceMaster.UserCode));
-                        var commiteeMemberDetail = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(committeeMember.UserCode));
-
-                        getEmailTemplate.Replace("{UserName}", requestor.empName);
-                        getEmailTemplate.Replace("{GrievanceId}", grievanceMaster.Id.ToString());
-                        getEmailTemplate.Replace("{CommitteeContactPerson}", committeeMember.UserDetails);
-                        getEmailTemplate.Replace("{CommitteeEmail}", commiteeMemberDetail.empEmail);
-                        getEmailTemplate.Replace("{CommitteePhone}", commiteeMemberDetail.empMobileNo);
-
-                        string emailSubject = $"Resolution Update: Grievance ID {grievanceMaster.Id} - Forwarded To Commitee";
-
-                        MailRequestModel mailRequest = new MailRequestModel()
-                        {
-                            EmailSubject = emailSubject,
-                            EmailBody = getEmailTemplate,
-                            EmailToId = _emailToId,
-                        };
-                        await _notificationRepository.SendNotification(mailRequest);
-                    }
-
-                    if (!string.IsNullOrEmpty(comment))
+                    string htmlFilePath = rootPath + @"\wwwroot\EmailTemplate\ForwardedToCommitee.html";
+                    using (StreamReader reader = File.OpenText(htmlFilePath))
                     {
-                        CommentDetail newComment = new CommentDetail()
-                        {
-                            CommentText = comment,
-                            CommentedBy = grievanceMaster.UserCode,
-                            CommentDate = DateTime.Now,
-                            CommentType = Constant.CommentType.GrievanceProcess,
-                            ReferenceId = grievanceProcessObj.Id,
-
-                            CreatedBy = Convert.ToInt32(grievanceMaster.UserCode),
-                            CreatedDate = DateTime.Now,
-                        };
-                        _dbContext.Comments.Add(newComment);
-                        _dbContext.SaveChanges();
+                        getEmailTemplate.Append(reader.ReadToEnd());
                     }
 
-                    await transaction.CommitAsync();
+                    var requestor = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(grievanceMaster.UserCode));
+                    var commiteeMemberDetail = await _employeeRepository.GetEmployeeDetailsWithEmpCode(Convert.ToInt32(committeeMember.UserCode));
 
-                    responseModel.StatusCode = HttpStatusCode.OK;
-                    responseModel.Message = "Third round of grievance initiated successfully.";
-                    responseModel.Data = grievanceProcessObj.Id;
+                    getEmailTemplate.Replace("{UserName}", requestor.empName);
+                    getEmailTemplate.Replace("{GrievanceId}", grievanceMaster.Id.ToString());
+                    getEmailTemplate.Replace("{CommitteeContactPerson}", committeeMember.UserDetails);
+                    getEmailTemplate.Replace("{CommitteeEmail}", commiteeMemberDetail.empEmail);
+                    getEmailTemplate.Replace("{CommitteePhone}", commiteeMemberDetail.empMobileNo);
+
+                    string emailSubject = $"Resolution Update: Grievance ID {grievanceMaster.Id} - Forwarded To Commitee";
+
+                    MailRequestModel mailRequest = new MailRequestModel()
+                    {
+                        EmailSubject = emailSubject,
+                        EmailBody = getEmailTemplate,
+                        EmailToId = _emailToId,
+                    };
+                    await _notificationRepository.SendNotification(mailRequest);
                 }
-                catch (Exception ex)
+
+                if (!string.IsNullOrEmpty(comment))
                 {
-                    await transaction.RollbackAsync();
-                    responseModel.StatusCode = HttpStatusCode.InternalServerError;
-                    responseModel.Message = "An error occurred: " + ex.Message;
-                }
-            }
+                    CommentDetail newComment = new CommentDetail()
+                    {
+                        CommentText = comment,
+                        CommentedBy = grievanceMaster.UserCode,
+                        CommentDate = DateTime.Now,
+                        CommentType = Constant.CommentType.GrievanceProcess,
+                        ReferenceId = grievanceProcessObj.Id,
 
+                        CreatedBy = Convert.ToInt32(grievanceMaster.UserCode),
+                        CreatedDate = DateTime.Now,
+                    };
+                    _dbContext.Comments.Add(newComment);
+                    _dbContext.SaveChanges();
+                }
+
+                responseModel.StatusCode = HttpStatusCode.OK;
+                responseModel.Message = "Third round of grievance initiated successfully.";
+                responseModel.Data = grievanceProcessObj.Id;
+            }
+            catch (Exception ex)
+            {
+                responseModel.StatusCode = HttpStatusCode.InternalServerError;
+                responseModel.Message = "An error occurred: " + ex.Message;
+            }
             return responseModel;
         }
 
@@ -1139,16 +1128,25 @@ namespace Grievance_BAL.Services
                 query = query.Where(a => a.CreatedDate.Value.Year == yearInt);
             }
 
-            if (userAllRole.Contains(Constant.AppRoles.SuperAdmin))
+            if (userAllRole.Contains(Constant.AppRoles.SuperAdmin) || userAllRole.Contains(Constant.AppRoles.Committee))
             {
                 // to ignore the conditions because of priority role for a user having multiple roles
             }
-            else if (userAllRole.Contains(Constant.AppRoles.NodalOfficer) || userAllRole.Contains(Constant.AppRoles.UnitCGM) || userAllRole.Contains(Constant.AppRoles.Admin) || userAllRole.Contains(Constant.AppRoles.Committee))
+            else if (userAllRole.Contains(Constant.AppRoles.NodalOfficer) || userAllRole.Contains(Constant.AppRoles.UnitCGM) || userAllRole.Contains(Constant.AppRoles.Admin))
             {
                 if (string.IsNullOrEmpty(unitId))
                 {
-                    var assignedUnit = _dbContext.UserRoleMappings.Where(a => a.UserCode == userCode && (a.Role.RoleName == Constant.AppRoles.NodalOfficer || a.Role.RoleName == Constant.AppRoles.UnitCGM || a.Role.RoleName == Constant.AppRoles.Admin)).Select(a => a.UnitId).FirstOrDefault();
-                    query = query.Where(a => a.UnitId == assignedUnit);
+                    var assignedUnit = new List<string>();
+                    assignedUnit = _dbContext.UserRoleMappings.Where(a => a.UserCode == userCode && a.Role.RoleName == Constant.AppRoles.Admin).Select(a => a.UnitId).ToList() ?? new List<string>();
+
+                    assignedUnit.AddRange(
+                        (from r in _dbContext.AppRoles
+                         join g in _dbContext.Groups on r.Id equals g.RoleId
+                         join gm in _dbContext.UserGroupMappings on g.Id equals gm.GroupId
+                         where r.RoleName == Constant.AppRoles.NodalOfficer || r.RoleName == Constant.AppRoles.UnitCGM
+                         select gm.UnitId).ToList());
+
+                    query = query.Where(a => assignedUnit.Contains(a.UnitId));
                 }
             }
             else if (userAllRole.Contains(Constant.AppRoles.Redressal))
@@ -1294,7 +1292,6 @@ namespace Grievance_BAL.Services
                 responseModel.StatusCode = HttpStatusCode.OK;
                 responseModel.Message = "Resolution data not found.";
             }
-
             return responseModel;
         }
 
