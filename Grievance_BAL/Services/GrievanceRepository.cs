@@ -674,7 +674,7 @@ namespace Grievance_BAL.Services
                                     join gm in _dbContext.UserGroupMappings on g.Id equals gm.GroupId
                                     where r.RoleName == Constant.AppRoles.NodalOfficer && gm.UnitId ==
                                     lastResolverUnit
-                                    select new { gm.UserCode, gm.UserDetails }).FirstOrDefault();
+                                    select new { gm.UserCode, gm.UserDetails, TGroupId = g.Id, gm.UnitId }).FirstOrDefault();
 
                 if (nodalOfficer == null)
                 {
@@ -684,12 +684,7 @@ namespace Grievance_BAL.Services
                         Message = "No Nodal Officer found for this unit."
                     };
                 }
-                var tGroupId = 0;
-                if (lastResolverUnit == _configuration["FinalCommiteeUnit"].ToString())
-                    tGroupId = _dbContext.Groups.Where(a => a.UnitId == lastResolverUnit).Select(a => a.Id).FirstOrDefault();
-                else
-                    tGroupId = _dbContext.Groups.Where(a => a.UnitId != lastResolverUnit).Select(a => a.Id).FirstOrDefault();
-
+                
                 GrievanceProcess grievanceProcessObj = new GrievanceProcess()
                 {
                     GrievanceMasterId = grievanceMasterId,
@@ -703,8 +698,8 @@ namespace Grievance_BAL.Services
                     CreatedBy = Convert.ToInt32(grievanceMaster.UserCode),
                     CreatedDate = DateTime.Now,
 
-                    TGroupId = tGroupId,
-                    TUnitId = lastResolverUnit,
+                    TGroupId = nodalOfficer.TGroupId,
+                    TUnitId = nodalOfficer.UnitId,
                     TDepartment = null
                 };
 
