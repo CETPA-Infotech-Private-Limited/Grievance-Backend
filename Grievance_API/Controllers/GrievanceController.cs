@@ -65,11 +65,19 @@ namespace Grievance_API.Controllers
         {
             return await _grievanceRepository.GetDashboardDataAsync(userCode, unitId, department, year);
         }
+        
+        [HttpGet("GetAssignedDashboardData")]
+        public async Task<ResponseModel> GetAssignedDashboardData(string userCode, string? unitId, string? year)
+        {
+            return await _grievanceRepository.GetAssignedDashboardDataAsync(userCode, unitId, year);
+        }
+
         [HttpGet("GetMyDashboardData")]
         public async Task<ResponseModel> GetMyDashboardData(string userCode)
         {
             return await _grievanceRepository.GetMyDashboardDataAsync(userCode);
         }
+
         [HttpGet("GetResolutionData")]
         public async Task<ResponseModel> GetResolutionData(int grievanceMasterId)
         {
