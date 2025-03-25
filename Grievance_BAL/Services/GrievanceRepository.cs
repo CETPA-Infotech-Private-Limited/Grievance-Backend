@@ -320,8 +320,6 @@ namespace Grievance_BAL.Services
 
             if (grievanceMaster.Id != 0)
             {
-                string addressalCode = string.Empty;
-                string addressalDetail = string.Empty;
                 if (string.IsNullOrEmpty(grievanceModel.AssignedUserCode))
                 {
                     var FinalCommiteeUnit = _configuration["FinalCommiteeUnit"].ToString();
@@ -334,12 +332,18 @@ namespace Grievance_BAL.Services
                                          select new
                                          {
                                              UserCode = ug.UserCode,
-                                             UserDetails = ug.UserDetails
+                                             UserDetails = ug.UserDetails,
+                                             UnitId = ug.UnitId,
+                                             GroupId = ug.GroupId,
+                                             Department = ud.Department
                                          }).FirstOrDefault();
                         if (addressal != null)
                         {
-                            addressalCode = addressal.UserCode;
-                            addressalDetail = addressal.UserDetails;
+                            grievanceModel.AssignedUserCode = addressal.UserCode;
+                            grievanceModel.AssignedUserDetails = addressal.UserDetails;
+                            grievanceModel.TUnitId = addressal.UnitId;
+                            grievanceModel.TGroupId = addressal.GroupId;
+                            grievanceModel.TDepartment = addressal.Department;
                         }
                     }
                     else
@@ -349,16 +353,20 @@ namespace Grievance_BAL.Services
                                          select new
                                          {
                                              UserCode = ug.UserCode,
-                                             UserDetails = ug.UserDetails
+                                             UserDetails = ug.UserDetails,
+                                             UnitId = ug.UnitId,
+                                             GroupId = ug.GroupId,
                                          }).FirstOrDefault();
                         if (addressal != null)
                         {
-                            addressalCode = addressal.UserCode;
-                            addressalDetail = addressal.UserDetails;
+                            grievanceModel.AssignedUserCode = addressal.UserCode;
+                            grievanceModel.AssignedUserDetails = addressal.UserDetails;
+                            grievanceModel.TUnitId = addressal.UnitId;
+                            grievanceModel.TGroupId = addressal.GroupId;
                         }
                     }
 
-                    if (string.IsNullOrEmpty(addressalCode) && string.IsNullOrEmpty(addressalDetail))
+                    if (string.IsNullOrEmpty(grievanceModel.AssignedUserCode))
                     {
                         var addressal = (from ug in _dbContext.UserGroupMappings
                                          join gmst in _dbContext.Groups on ug.GroupId equals gmst.Id
@@ -367,19 +375,18 @@ namespace Grievance_BAL.Services
                                          select new
                                          {
                                              UserCode = ug.UserCode,
-                                             UserDetails = ug.UserDetails
+                                             UserDetails = ug.UserDetails,
+                                             UnitId = ug.UnitId,
+                                             GroupId = ug.GroupId
                                          }).FirstOrDefault();
                         if (addressal != null)
                         {
-                            addressalCode = addressal.UserCode;
-                            addressalDetail = addressal.UserDetails;
+                            grievanceModel.AssignedUserCode = addressal.UserCode;
+                            grievanceModel.AssignedUserDetails = addressal.UserDetails;
+                            grievanceModel.TUnitId = addressal.UnitId;
+                            grievanceModel.TGroupId = addressal.GroupId;
                         }
                     }
-                }
-                else
-                {
-                    addressalCode = grievanceModel.AssignedUserCode;
-                    addressalDetail = grievanceModel.AssignedUserDetails;
                 }
 
                 GrievanceProcess grievanceProcessObj = new GrievanceProcess()
@@ -392,8 +399,8 @@ namespace Grievance_BAL.Services
                     StatusId = grievanceMaster == null ? (int)Grievance_Utility.GrievanceStatus.Open : grievanceModel.StatusId ?? grievanceMaster.StatusId,
                     RowStatus = Grievance_Utility.RowStatus.Active,
 
-                    AssignedUserCode = string.IsNullOrEmpty(addressalCode) ? string.Empty : addressalCode,
-                    AssignedUserDetails = string.IsNullOrEmpty(addressalDetail) ? string.Empty : addressalDetail,
+                    AssignedUserCode = string.IsNullOrEmpty(grievanceModel.AssignedUserCode) ? string.Empty : grievanceModel.AssignedUserCode,
+                    AssignedUserDetails = string.IsNullOrEmpty(grievanceModel.AssignedUserDetails) ? string.Empty : grievanceModel.AssignedUserDetails,
 
                     CreatedBy = Convert.ToInt32(grievanceModel.UserCode),
                     CreatedDate = DateTime.Now,
@@ -1165,10 +1172,23 @@ namespace Grievance_BAL.Services
                     query = query.Where(a => assignedUnit.Contains(a.UnitId));
                 }
             }
-            
+            var openForRedressal = (from gm in _dbContext.GrievanceMasters
+                                    join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
+                                    where gp.AssignedUserCode == userCode &&
+                                    (gp.Id == _dbContext.GrievanceProcesses
+                                              .Where(t => t.GrievanceMasterId == gm.Id)
+                                              .OrderByDescending(t => t.Id)
+                                              .Select(t => t.Id)
+                                              .FirstOrDefault())
+                                    && (gp.CreatedBy != _dbContext.GrievanceProcesses
+                                              .Where(t => t.GrievanceMasterId == gm.Id)
+                                              .First().CreatedBy)
+                                    && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Closed
+                                    select gm.Id).Distinct();
+
             finalData.TotalGrievance = query.Count();
-            finalData.Pending = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Open).Count();
-            finalData.InProgress = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.InProgress).Count();
+            finalData.Pending = openForRedressal.Count();
+            finalData.InProgress = query.Where(a => a.StatusId != (int)Grievance_Utility.GrievanceStatus.Closed).Select(a => a.Id).Except(openForRedressal).Count();
             finalData.Resolved = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Closed).Count();
 
             var unresolvedQuery = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Open || a.StatusId == (int)Grievance_Utility.GrievanceStatus.InProgress);
@@ -1220,8 +1240,6 @@ namespace Grievance_BAL.Services
             }
 
             AssignedDashboardModel finalData = new();
-            var userAllRole = (List<string>)(await _userRepository.GetUserRolesAsync(userCode)).Data ?? new List<string>();
-
             IQueryable<GrievanceMaster> query = _dbContext.GrievanceMasters.AsQueryable();
 
             if (!string.IsNullOrEmpty(unitId))
@@ -1234,19 +1252,34 @@ namespace Grievance_BAL.Services
                 query = query.Where(a => a.CreatedDate.Value.Year == yearInt);
             }
 
-            var masterGrievance = await (from gm in _dbContext.GrievanceMasters
+            var masterGrievance = (from gm in _dbContext.GrievanceMasters
                                          join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
                                          where gp.AssignedUserCode == userCode
-                                         select gm.Id).ToListAsync();
+                                         select gm);
 
-            query = query.Where(g => masterGrievance.Contains(g.Id));
+            var openForRedressal = (from gm in _dbContext.GrievanceMasters
+                                    join gp in _dbContext.GrievanceProcesses on gm.Id equals gp.GrievanceMasterId
+                                    where gp.AssignedUserCode == userCode &&
+                                    (gp.Id == _dbContext.GrievanceProcesses
+                                              .Where(t => t.GrievanceMasterId == gm.Id)
+                                              .OrderByDescending(t => t.Id)
+                                              .Select(t => t.Id)
+                                              .FirstOrDefault())
+                                    && (gp.CreatedBy != _dbContext.GrievanceProcesses
+                                              .Where(t => t.GrievanceMasterId == gm.Id)
+                                              .First().CreatedBy)
+                                    && gp.StatusId != (int)Grievance_Utility.GrievanceStatus.Closed
+                                    select gm.Id).Distinct();
+
+            query = query.Where(g => masterGrievance.Select(a=>a.Id).Contains(g.Id));
 
             finalData.TotalGrievance = query.Count();
-            finalData.Pending = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Open).Count();
-            finalData.InProgress = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.InProgress).Count();
+            finalData.Pending = openForRedressal.Count();
+            finalData.InProgress = masterGrievance.Where(a=>a.StatusId != (int)Grievance_Utility.GrievanceStatus.Closed).Select(a => a.Id).Except(openForRedressal).Count();
             finalData.Resolved = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Closed).Count();
 
             var unresolvedQuery = query.Where(a => a.StatusId == (int)Grievance_Utility.GrievanceStatus.Open || a.StatusId == (int)Grievance_Utility.GrievanceStatus.InProgress);
+
             finalData.Unresolved = unresolvedQuery.Count();
             finalData.Over7Days = unresolvedQuery.Where(a => a.CreatedDate <= DateTime.Now.AddDays(-7)).Count();
             finalData.Over14Days = unresolvedQuery.Where(a => a.CreatedDate <= DateTime.Now.AddDays(-14)).Count();
@@ -1255,7 +1288,7 @@ namespace Grievance_BAL.Services
             finalData.ThisMonth = unresolvedQuery.Where(a => a.CreatedDate >= startOfCurrentMonth).Count();
             finalData.Over30Days = unresolvedQuery.Where(a => a.CreatedDate <= DateTime.Now.AddDays(-30)).Count();
 
-            var monthlyData = query
+            var monthlyData = query.ToList()
                 .GroupBy(a => a.CreatedDate.Value.Month)
                 .Select(g => new { Month = g.Key, Count = g.Count() })
                 .ToDictionary(g => g.Month, g => g.Count);
