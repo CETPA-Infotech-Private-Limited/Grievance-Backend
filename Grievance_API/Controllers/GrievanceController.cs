@@ -2,6 +2,7 @@
 using Grievance_BAL.Services;
 using Grievance_Model.DTOs.AppResponse;
 using Grievance_Model.DTOs.Grievance;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Grievance_API.Controllers
@@ -12,16 +13,27 @@ namespace Grievance_API.Controllers
     {
         private readonly IGrievanceRepository _grievanceRepository;
         private readonly IHttpContextAccessor _httpContextAccessor;
-        public GrievanceController(IGrievanceRepository grievanceRepository, IHttpContextAccessor httpContextAccessor)
+        private readonly Iwhatsappservice _whaservice;
+
+        public GrievanceController(IGrievanceRepository grievanceRepository, IHttpContextAccessor httpContextAccessor, Iwhatsappservice whaservice)
         {
             _grievanceRepository = grievanceRepository;
             _httpContextAccessor = httpContextAccessor;
+            _whaservice = whaservice;
         }
 
         [HttpGet("GetGrievanceList")]
         public async Task<ResponseModel> GetGrievanceList(string userCode, int pageNumber = 1, int pageSize = 10)
         {
             return await _grievanceRepository.GetGrievanceListAsync(userCode, pageNumber, pageSize);
+        }
+
+        [HttpGet("whatsappSend")]
+        [AllowAnonymous]
+        public async Task<ResponseModel> whatsappSend(string userCode, int pageNumber = 1, int pageSize = 10)
+        {
+            var response= await _whaservice.SendResolutionWhatsAppAsync("yash raj", "121","round-1","4567898765dfyuytr","sdgfyuiuytuyt", "9815689639");
+            return new ResponseModel { };
         }
         [HttpGet("MyGrievanceList")]
         public async Task<ResponseModel> MyGrievanceList(string userCode, int pageNumber = 1, int pageSize = 10)

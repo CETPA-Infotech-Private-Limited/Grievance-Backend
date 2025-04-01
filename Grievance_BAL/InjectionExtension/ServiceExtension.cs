@@ -14,6 +14,7 @@ namespace Grievance_BAL.InjectionExtension
             services.AddScoped<IGrievanceRepository, GrievanceRepository>();
             services.AddScoped<ICommonRepository, CommonRepository>();
             services.AddScoped<INotificationRepository, NotificationRepository>();
+            services.AddScoped<Iwhatsappservice, WhatsappServices>();
 
         }
     }

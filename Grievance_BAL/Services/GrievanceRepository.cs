@@ -24,7 +24,8 @@ namespace Grievance_BAL.Services
         private readonly ICommonRepository _common;
         private readonly INotificationRepository _notificationRepository;
         private readonly IConfiguration _configuration;
-        public GrievanceRepository(GrievanceDbContext dbContext, IEmployeeRepository employeeRepository, IUserRepository userRepository, ICommonRepository common, INotificationRepository notificationRepository, IConfiguration configuration)
+        private readonly Iwhatsappservice _whatsAppService;
+        public GrievanceRepository(GrievanceDbContext dbContext,Iwhatsappservice whatsappService, IEmployeeRepository employeeRepository, IUserRepository userRepository, ICommonRepository common, INotificationRepository notificationRepository, IConfiguration configuration)
         {
             _dbContext = dbContext;
             _employeeRepository = employeeRepository;
@@ -32,6 +33,7 @@ namespace Grievance_BAL.Services
             _common = common;
             _notificationRepository = notificationRepository;
             _configuration = configuration;
+            _whatsAppService =whatsappService;
         }
 
         public async Task<ResponseModel> GetGrievanceListAsync(string userCode, int pageNumber = 1, int pageSize = 10)
@@ -541,6 +543,29 @@ namespace Grievance_BAL.Services
                 };
 
                 var sendMailDetails = await _notificationRepository.SendNotification(mailRequest);
+
+                try
+                {
+                    bool whatsAppSent = false;
+                    if (!string.IsNullOrEmpty(requestor.empMobileNo))
+                    {
+                        whatsAppSent = await _whatsAppService.SendResolutionWhatsAppAsync(
+                            requestor.empName,
+                            resolutionDetail.GrievanceMasterId.ToString(),
+                            resolutionDetail.Round.ToString(),
+                            resolutionDetail.AcceptLink,
+                            resolutionDetail.RejectLink,
+                            requestor.empMobileNo
+                        );
+                    }
+
+                }
+                catch
+                {
+
+                }
+                
+               
 
                 if (sendMailDetails != null && sendMailDetails.StatusCode == HttpStatusCode.OK)
                 {
