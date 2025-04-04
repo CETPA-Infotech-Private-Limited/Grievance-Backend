@@ -41,7 +41,7 @@ namespace Grievance_BAL.Services
 
                 // If in test environment, redirect all messages to test number
                 string receiverNumber = mobileNumber;
-                if (deploymentMode == "CETPA")
+                if (deploymentMode == "CETPA" || deploymentMode == "DFCCIL_UAT")
                 {
                     receiverNumber = TestNumber;
                 }
