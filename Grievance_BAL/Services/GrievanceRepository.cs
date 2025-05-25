@@ -178,12 +178,15 @@ namespace Grievance_BAL.Services
                                         TUnit = gp.TUnitId,
                                         TGroupId = gp.TGroupId,
                                         TDepartment = gp.TDepartment,
+                                        IsVisited = gp.IsVisited,
                                         AssignedUserCode = gp.AssignedUserCode,
                                         AssignedUserDetails = gp.AssignedUserDetails,
                                         CreatedDate = gm.CreatedDate,
                                         CreatedBy = gm.CreatedBy,
                                         ModifiedDate = gp.CreatedDate,
-                                        ModifiedBy = gp.CreatedBy
+                                        ModifiedBy = gp.CreatedBy,
+                                        IsTransferred = !(_dbContext.GrievanceProcesses.Where(a=>a.GrievanceMasterId == gm.Id && a.Round == gm.Round).Select(a=>a.AssignedUserCode).Distinct().Count() == 1 && _dbContext.GrievanceProcesses.Where(a => a.GrievanceMasterId == gm.Id && a.Round == gm.Round).Select(a => a.AssignedUserCode).Distinct().First() == userCode),
+                                        Resolution = _dbContext.ResolutionDetails.Where(a=>a.GrievanceMasterId == gm.Id && a.Round == gm.Round).FirstOrDefault(),
                                     })
                         .OrderByDescending(g => g.CreatedDate)
                         .Skip((pageNumber - 1) * pageSize)
@@ -407,7 +410,8 @@ namespace Grievance_BAL.Services
 
                     TUnitId = grievanceModel.TUnitId,
                     TGroupId = grievanceModel.TGroupId,
-                    TDepartment = grievanceModel.TDepartment
+                    TDepartment = grievanceModel.TDepartment,
+                    IsVisited = grievanceModel.IsVisited
                 };
 
                 _dbContext.GrievanceProcesses.Add(grievanceProcessObj);
@@ -707,7 +711,8 @@ namespace Grievance_BAL.Services
 
                     TGroupId = nodalOfficer.TGroupId,
                     TUnitId = nodalOfficer.UnitId,
-                    TDepartment = null
+                    TDepartment = null,
+                    IsVisited = true
                 };
 
                 _dbContext.GrievanceProcesses.Add(grievanceProcessObj);
@@ -809,7 +814,8 @@ namespace Grievance_BAL.Services
 
                     TGroupId = committeeMember.GroupId,
                     TUnitId = committeeMember.UnitId,
-                    TDepartment = null
+                    TDepartment = null,
+                    IsVisited = true
                 };
 
                 _dbContext.GrievanceProcesses.Add(grievanceProcessObj);
@@ -917,7 +923,9 @@ namespace Grievance_BAL.Services
 
                             TGroupId = gp.TGroupId,
                             TUnitId = gp.TUnitId,
-                            TDepartment = gp.TDepartment
+                            TDepartment = gp.TDepartment,
+                            IsVisited = gp.IsVisited,
+                            Resolution = _dbContext.ResolutionDetails.Where(a => a.GrievanceMasterId == grievanceDetail.Id && a.Round == grievanceDetail.Round).FirstOrDefault(),
                         })
                         .FirstOrDefaultAsync();
 
@@ -1095,7 +1103,7 @@ namespace Grievance_BAL.Services
             List<GrievanceChange> changes = new List<GrievanceChange>();
 
             var CompareOnlyColumns = new List<string> {
-                "AssignedUserCode", "AssignedUserDetails", "TUnitId", "TGroupId", "TDepartment", "CreatedBy","CreatedDate"
+                "AssignedUserCode", "AssignedUserDetails", "TUnitId", "TGroupId", "TDepartment", "CreatedBy", "CreatedDate", "Round"
             };
             var properties = (typeof(GrievanceProcess).GetProperties()).Where(a => CompareOnlyColumns.Contains(a.Name));
             foreach (var property in properties)
@@ -1302,7 +1310,24 @@ namespace Grievance_BAL.Services
                     TotalCount = monthlyData.ContainsKey(month) ? monthlyData[month] : 0
                 });
             }
-            finalData.RecentGrievances = query.OrderByDescending(a => a.Id).Take(3).ToList();
+            var recentGrievance = query.Where(a => openForRedressal.Contains(a.Id)).OrderByDescending(a => a.Id).Select(a => new
+            {
+                a.Id,
+                a.Title,
+                a.CreatedDate,
+                Status = "Open"
+            }).Take(3).ToList();
+            if (recentGrievance.Count < 3)
+            {
+                recentGrievance.AddRange(query.Where(a => masterGrievance.Where(a => a.StatusId != (int)Grievance_Utility.GrievanceStatus.Closed).Select(a => a.Id).Except(openForRedressal).Contains(a.Id)).OrderByDescending(a => a.Id).Select(a => new
+                {
+                    a.Id,
+                    a.Title,
+                    a.CreatedDate,
+                    Status = "InProgress"
+                }).Take(3).ToList());
+            }
+            finalData.RecentGrievances = recentGrievance;
 
             responseModel.StatusCode = HttpStatusCode.OK;
             responseModel.Message = "Dashboard data retrieved successfully.";
@@ -1391,6 +1416,42 @@ namespace Grievance_BAL.Services
             {
                 responseModel.StatusCode = HttpStatusCode.OK;
                 responseModel.Message = "Resolution data not found.";
+            }
+            return responseModel;
+        }
+
+        public async Task<ResponseModel> UpdateIsVisitedAsync (int grievanceId, bool isVisited)
+        {
+            ResponseModel responseModel = new ResponseModel
+            {
+                StatusCode = HttpStatusCode.BadRequest,
+                Message = "Bad Request"
+            };
+
+            if (grievanceId == 0)
+            {
+                return new ResponseModel
+                {
+                    StatusCode = HttpStatusCode.NotFound,
+                    Message = "Grievance not found."
+                };
+            }
+
+            var grievanceProcess = await _dbContext.GrievanceProcesses.Where(a => a.GrievanceMasterId == grievanceId).OrderByDescending(a => a.Id).FirstOrDefaultAsync();
+
+            if (grievanceProcess != null)
+            {
+                grievanceProcess.IsVisited = isVisited;
+                _dbContext.GrievanceProcesses.Update(grievanceProcess);
+                _dbContext.SaveChanges();
+
+                responseModel.StatusCode = HttpStatusCode.OK;
+                responseModel.Message = "Grievance data updated";
+            }
+            else
+            {
+                responseModel.StatusCode = HttpStatusCode.BadRequest;
+                responseModel.Message = "Grievance data not updated";
             }
             return responseModel;
         }

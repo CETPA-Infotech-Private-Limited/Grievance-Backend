@@ -34,6 +34,8 @@ namespace Grievance_DAL.DbModels
         public int? TGroupId {  get; set; } //to log the transfer changes of a grievance
         public string? TDepartment { get; set; }
 
+        public bool? IsVisited { get; set; } = true;
+
     }
 
 }
